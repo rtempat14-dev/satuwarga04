@@ -23,7 +23,7 @@
    - Grafik interaktif tren arus kas bulanan berbasis Chart.js.
    - **Seksi Demografi & Kependudukan RT 04**:
      - 4 Bento Cards dengan warna-warni menarik (Total KK, Total Jiwa, Rasio Warga Tetap, Blok Terpadat).
-     - **Grafik Sebaran Blok Jalan**: Bar Chart interaktif sebaran KK di wilayah Ciskul I, Ciskul 6 s.d. Ciskul 10.
+     - **Grafik Sebaran Blok Jalan**: Bar Chart interaktif sebaran KK di wilayah Ciskul I, Ciskul 6 s.d. Ciskul 10, Gemani.
      - **Grafik Komposisi Status Hunian**: Doughnut Chart perbandingan warga tetap vs warga kontrak/sewa.
      - **Tombol Pintas Navigasi Blok**: Akses 1-klik untuk menyaring direktori warga langsung berdasarkan blok jalan yang dipilih.
    - **Radar Tunggakan Iuran**:
@@ -50,7 +50,7 @@
    - Grafik realisasi iuran bulanan KK.
 
 5. **Kependudukan & e-Sensus Mandiri**:
-   - **Direktori KK**: Pencarian cepat nama KK & nomor rumah, filter status (Tetap/Kontrak), filter per blok jalan (Ciskul I, Ciskul 6 s.d. Ciskul 10).
+   - **Direktori KK**: Pencarian cepat nama KK & nomor rumah, filter status (Tetap/Kontrak), filter per blok jalan (Ciskul I, Ciskul 6 s.d. Ciskul 10, Gemani).
    - **e-KTP Digital Warga**: Kartu tanda identitas digital lingkungan resmi tingkat RT.
    - **e-Sensus Mandiri**: Formulir warga praktis dengan pencegahan data ganda (anti-duplikasi).
    - **Statistik Demografi**: Diagram komposisi status hunian dan distribusi warga per blok.

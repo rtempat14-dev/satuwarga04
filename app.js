@@ -1056,7 +1056,7 @@ function renderDashboardKependudukanSection() {
   const pctKontrak = totalKK > 0 ? Math.round((kontrakCount / totalKK) * 100) : 0;
   const avgJiwa = totalKK > 0 ? (totalJiwa / totalKK).toFixed(1) : '0.0';
 
-  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10'];
+  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
   const blokData = blokNames.map(b => ({
     nama: b,
     count: db.warga.filter(w => w.noRumah && (w.noRumah.includes(b) || (b === 'Ciskul I' && /\bCiskul 1\b/i.test(w.noRumah)))).length
@@ -1160,10 +1160,10 @@ function renderDashboardKependudukanSection() {
                 <i class="ph-bold ph-chart-bar text-sky-600"></i>
                 Sebaran KK per Blok Jalan
               </h4>
-              <p class="text-[10px] text-slate-400">Distribusi wilayah Ciskul I s.d. Ciskul 10</p>
+              <p class="text-[10px] text-slate-400">Distribusi wilayah RT 04 (Ciskul & Gemani)</p>
             </div>
             <span class="text-[9px] font-black px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 border border-sky-200">
-              6 Blok
+              ${blokNames.length} Blok / Jalan
             </span>
           </div>
           <div class="relative w-full h-44">
@@ -2533,6 +2533,304 @@ function eksekusiResetIuran() {
 // ==========================================
 // 4. HALAMAN WARGA & e-SENSUS
 // ==========================================
+
+// Helper Normalisasi & Validasi Nomor Rumah RT 04
+function parseNoRumah(noRumahStr) {
+  if (!noRumahStr) return { blok: '', no: 0, raw: '' };
+  let str = String(noRumahStr).trim();
+  str = str.replace(/\bCiskul 1\b/gi, 'Ciskul I');
+  let blok = '';
+  let no = 0;
+  if (str.startsWith('Gemani')) {
+    blok = 'Gemani';
+    const numPart = str.replace(/^Gemani\s*(No\.?)?/i, '').trim();
+    no = parseInt(numPart.replace(/\D/g, ''), 10) || 0;
+  } else {
+    const match = str.match(/^(Ciskul\s+(?:I|\d+))\s*(?:No\.?)?\s*(\d+)/i);
+    if (match) {
+      blok = match[1];
+      if (blok.toLowerCase() === 'ciskul 1') blok = 'Ciskul I';
+      no = parseInt(match[2], 10) || 0;
+    } else {
+      const parts = str.split(/\s+/);
+      if (parts.length >= 2) {
+        blok = parts.slice(0, parts.length - 1).join(' ').replace(/No\.?$/i, '').trim();
+        no = parseInt(parts[parts.length - 1].replace(/\D/g, ''), 10) || 0;
+      }
+    }
+  }
+  return { blok, no, raw: str };
+}
+
+function isSameHouseNumber(alamat1, alamat2) {
+  if (!alamat1 || !alamat2) return false;
+  const a1 = String(alamat1).toLowerCase().trim().replace(/\bCiskul 1\b/gi, 'ciskul i');
+  const a2 = String(alamat2).toLowerCase().trim().replace(/\bCiskul 1\b/gi, 'ciskul i');
+  if (a1 === a2) return true;
+  const p1 = parseNoRumah(alamat1);
+  const p2 = parseNoRumah(alamat2);
+  if (p1.blok && p2.blok && p1.no && p2.no) {
+    return p1.blok.toLowerCase() === p2.blok.toLowerCase() && p1.no === p2.no;
+  }
+  return false;
+}
+
+function findWargaByNoRumah(noRumah, excludeId = null) {
+  if (!noRumah) return null;
+  return db.warga.find(w => {
+    if (excludeId && w.id === excludeId) return false;
+    return isSameHouseNumber(w.noRumah, noRumah);
+  }) || null;
+}
+
+function getRegisteredWargaInBlok(blok, excludeId = null) {
+  const normBlok = (blok || '').replace(/\bCiskul 1\b/gi, 'Ciskul I').toLowerCase().trim();
+  return db.warga.filter(w => {
+    if (excludeId && w.id === excludeId) return false;
+    const p = parseNoRumah(w.noRumah);
+    return p.blok.toLowerCase() === normBlok;
+  }).sort((a, b) => {
+    const pA = parseNoRumah(a.noRumah).no;
+    const pB = parseNoRumah(b.noRumah).no;
+    return pA - pB;
+  });
+}
+
+function getSensusNoRumahOptionsHtml(blok, selectedNo = null, excludeId = null) {
+  let html = '';
+  for (let i = 1; i <= 70; i++) {
+    const numStr = `No. ${i}`;
+    const fullAlamat = `${blok} ${numStr}`;
+    const penghuni = findWargaByNoRumah(fullAlamat, excludeId);
+    let isSel = false;
+    if (selectedNo) {
+      isSel = isSameHouseNumber(`${blok} ${selectedNo}`, fullAlamat);
+    } else if (i === 1 && !penghuni) {
+      isSel = true;
+    }
+    
+    if (penghuni) {
+      html += `<option value="${numStr}" class="text-rose-600 font-bold bg-rose-50" style="color: #e11d48; font-weight: bold; background-color: #fff1f2;" ${isSel ? 'selected' : ''}>${numStr} 🔴 [SUDAH TERDAFTAR: ${penghuni.nama}]</option>`;
+    } else {
+      html += `<option value="${numStr}" class="text-slate-700" ${isSel ? 'selected' : ''}>${numStr} (Tersedia)</option>`;
+    }
+  }
+  return html;
+}
+
+function getSensusHighlightPanelHtml(blok, excludeId = null) {
+  const list = getRegisteredWargaInBlok(blok, excludeId);
+  const count = list.length;
+  const tersedia = 70 - count;
+  
+  return `
+    <div class="space-y-2">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-1.5">
+          <i class="ph-bold ph-house-line text-amber-600 text-sm"></i>
+          <span class="text-xs font-black text-slate-800">Nomor Rumah Terdaftar di <span class="text-amber-700 underline font-black">${blok}</span>:</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-[10.5px] font-bold">
+          <span class="px-2 py-0.5 rounded-full ${count > 0 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-slate-100 text-slate-500'}">
+            🔴 ${count} Terdaftar
+          </span>
+          <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+            🟢 ${tersedia} Tersedia
+          </span>
+          <button type="button" onclick="openModalRekapRumahSemuaBlok()" class="ml-1 px-2 py-0.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition flex items-center gap-1 text-[10px] active:scale-95">
+            <i class="ph-bold ph-squares-four text-xs"></i>
+            <span>Semua Blok</span>
+          </button>
+        </div>
+      </div>
+
+      ${count === 0 ? `
+        <div class="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 text-[11px] flex items-center gap-2">
+          <i class="ph-bold ph-check-circle text-emerald-500 text-base"></i>
+          <span>Belum ada nomor rumah yang terdaftar di blok <b>${blok}</b>. Seluruh nomor <b>No. 1 s/d No. 70</b> masih tersedia.</span>
+        </div>
+      ` : `
+        <div class="p-2.5 rounded-xl bg-white border border-slate-200 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nomor Rumah yang Sudah Digunakan (Tertolak Jika Diinput Ulang):</p>
+            <span class="text-[9.5px] text-slate-400 italic">Klik nomor untuk memilih</span>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            ${list.map(w => {
+              const p = parseNoRumah(w.noRumah);
+              return `
+                <button type="button" onclick="pilihNomorRumahSensus('${blok}', 'No. ${p.no}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100 transition shadow-2xs active:scale-95" title="Klik untuk cek status: ${w.noRumah} telah dihuni ${w.nama}">
+                  <span class="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0 animate-pulse"></span>
+                  <b>No. ${p.no}</b>
+                  <span class="text-[10px] text-rose-600 font-semibold truncate max-w-[120px]">(${w.nama})</span>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function getSensusStatusBannerHtml(blok, noStr, excludeId = null) {
+  if (!blok || !noStr) return '';
+  const fullAlamat = `${blok} ${noStr}`;
+  const penghuni = findWargaByNoRumah(fullAlamat, excludeId);
+
+  if (penghuni) {
+    return `
+      <div class="p-3.5 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-900 text-xs flex items-start gap-3 shadow-xs animate-pulse-once">
+        <div class="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 text-lg">
+          <i class="ph-bold ph-prohibit"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-black text-rose-800 uppercase tracking-wide text-[10px] bg-rose-200/90 px-2 py-0.5 rounded-md">
+              ❌ Nomor Rumah Tertolak / Sudah Terdaftar
+            </span>
+          </div>
+          <p class="text-xs font-black text-rose-950 mt-1">
+            Alamat <b>${fullAlamat}</b> telah digunakan dan terdaftar atas nama: <span class="text-rose-700 underline font-black">${penghuni.nama}</span> (${penghuni.status || 'Warga'}).
+          </p>
+          <p class="text-[11px] text-rose-700 mt-1">
+            ⚠️ Penginputan sensus untuk nomor rumah ini <span class="font-black underline">pasti ditolak</span> oleh sistem RT 04 karena alamat telah terisi. Silakan pilih nomor rumah lain yang bertanda <i>(Tersedia)</i>.
+          </p>
+        </div>
+      </div>
+    `;
+  } else {
+    return `
+      <div class="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-3">
+        <div class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 text-base">
+          <i class="ph-bold ph-check-circle"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-bold text-emerald-950">
+            Nomor Rumah <b>${fullAlamat}</b> <span class="text-emerald-700 font-extrabold uppercase">Tersedia</span>
+          </p>
+          <p class="text-[11px] text-emerald-700">Nomor rumah ini belum terdaftar di sistem RT 04 dan siap untuk diinputkan.</p>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function handleSensusBlokChange() {
+  const blokEl = document.getElementById('sensusBlok');
+  const noEl = document.getElementById('sensusNoRumah');
+  if (!blokEl || !noEl) return;
+  const blok = blokEl.value;
+  
+  noEl.innerHTML = getSensusNoRumahOptionsHtml(blok, noEl.value);
+  handleSensusNoRumahChange();
+}
+
+function handleSensusNoRumahChange() {
+  const blokEl = document.getElementById('sensusBlok');
+  const noEl = document.getElementById('sensusNoRumah');
+  const bannerEl = document.getElementById('sensusStatusBanner');
+  const highlightEl = document.getElementById('sensusHighlightContainer');
+  if (!blokEl || !noEl) return;
+  
+  const blok = blokEl.value;
+  const no = noEl.value;
+  const fullAlamat = `${blok} ${no}`;
+  const penghuni = findWargaByNoRumah(fullAlamat);
+
+  if (penghuni) {
+    noEl.classList.add('border-rose-500', 'ring-2', 'ring-rose-300', 'bg-rose-50/50');
+    noEl.classList.remove('border-slate-200', 'border-emerald-500', 'bg-slate-50', 'bg-emerald-50/20');
+  } else {
+    noEl.classList.add('border-emerald-500', 'bg-emerald-50/20');
+    noEl.classList.remove('border-rose-500', 'ring-2', 'ring-rose-300', 'bg-rose-50/50');
+  }
+
+  if (bannerEl) {
+    bannerEl.innerHTML = getSensusStatusBannerHtml(blok, no);
+  }
+  if (highlightEl) {
+    highlightEl.innerHTML = getSensusHighlightPanelHtml(blok);
+  }
+}
+
+function pilihNomorRumahSensus(blok, no) {
+  const blokEl = document.getElementById('sensusBlok');
+  const noEl = document.getElementById('sensusNoRumah');
+  if (blokEl && blokEl.value !== blok) {
+    blokEl.value = blok;
+    noEl.innerHTML = getSensusNoRumahOptionsHtml(blok, no);
+  }
+  if (noEl) {
+    noEl.value = no;
+  }
+  handleSensusNoRumahChange();
+  const bannerEl = document.getElementById('sensusStatusBanner');
+  if (bannerEl) bannerEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function openModalRekapRumahSemuaBlok() {
+  const daftarBlok = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
+  
+  const html = `
+    <div class="space-y-4 text-left max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div>
+          <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Direktori Pemukiman</span>
+          <h3 class="text-sm font-black text-slate-900 mt-1">Rekap Nomor Rumah Terdaftar RT 04</h3>
+          <p class="text-[11px] text-slate-500 mt-0.5">Daftar nomor rumah yang telah digunakan / terdaftar di seluruh blok.</p>
+        </div>
+        <button onclick="closeModal()" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <div class="overflow-y-auto space-y-3 pr-1">
+        ${daftarBlok.map(b => {
+          const terdaftar = getRegisteredWargaInBlok(b);
+          const count = terdaftar.length;
+          return `
+            <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                  <i class="ph-bold ph-buildings text-amber-600"></i>
+                  Blok ${b}
+                </span>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${count > 0 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}">
+                  ${count} Terdaftar / ${70 - count} Tersedia
+                </span>
+              </div>
+              ${count === 0 ? `
+                <p class="text-[11px] text-slate-400 italic">Belum ada nomor rumah yang terdaftar di blok ini (Semua No. 1-70 tersedia).</p>
+              ` : `
+                <div class="flex flex-wrap gap-1.5 pt-1">
+                  ${terdaftar.map(w => {
+                    const p = parseNoRumah(w.noRumah);
+                    return `
+                      <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10.5px] font-bold bg-white text-slate-800 border border-slate-200 shadow-2xs">
+                        <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                        <b class="text-rose-700">No. ${p.no}</b>
+                        <span class="text-[9.5px] text-slate-500 font-semibold truncate max-w-[130px]">(${w.nama})</span>
+                      </span>
+                    `;
+                  }).join('')}
+                </div>
+              `}
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <div class="pt-2 border-t border-slate-200 text-right">
+        <button onclick="closeModal()" class="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold transition hover:bg-slate-900">
+          Tutup Rekap
+        </button>
+      </div>
+    </div>
+  `;
+  openModal(html);
+}
+
 function getFilteredWargaList() {
   const q = wargaSearchQuery.toLowerCase().trim();
   const terms = q ? q.split(/\s+/).filter(Boolean) : [];
@@ -2732,6 +3030,7 @@ function renderWarga() {
                 <option value="Ciskul 8" ${wargaFilterBlok === 'Ciskul 8' ? 'selected' : ''}>Blok Ciskul 8</option>
                 <option value="Ciskul 9" ${wargaFilterBlok === 'Ciskul 9' ? 'selected' : ''}>Blok Ciskul 9</option>
                 <option value="Ciskul 10" ${wargaFilterBlok === 'Ciskul 10' ? 'selected' : ''}>Blok Ciskul 10</option>
+                <option value="Gemani" ${wargaFilterBlok === 'Gemani' ? 'selected' : ''}>Blok Gemani</option>
               </select>
             </div>
           </div>
@@ -2772,12 +3071,12 @@ function renderWarga() {
           </div>
         </div>
       ` : `
-        <!-- Formulir e-Sensus Mandiri dengan Validasi Anti-Duplikasi -->
+        <!-- Formulir e-Sensus Mandiri dengan Validasi Anti-Duplikasi Nomor Rumah -->
         <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
           <div>
             <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 uppercase">Pemutakhiran Data Warga</span>
             <h3 class="text-sm font-black text-slate-900 mt-1">e-Sensus Mandiri & Data KK RT 04</h3>
-            <p class="text-[11px] text-slate-500 mt-0.5">Isi formulir berikut untuk mendaftarkan Kepala Keluarga baru atau memperbarui data KK Anda.</p>
+            <p class="text-[11px] text-slate-500 mt-0.5">Isi formulir berikut untuk mendaftarkan Kepala Keluarga baru atau memperbarui data KK Anda. Nama KK yang sama diperbolehkan karena pembedanya adalah nomor rumah.</p>
           </div>
 
           <form onsubmit="handleSensusSubmit(event)" class="space-y-3.5 text-left">
@@ -2785,24 +3084,36 @@ function renderWarga() {
               <div>
                 <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Nama Kepala Keluarga (KK)</label>
                 <input type="text" id="sensusNama" required placeholder="Nama lengkap KK" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <p class="text-[10px] text-slate-400 mt-1 font-medium">Boleh sama dengan warga lain (pembeda: nomor rumah).</p>
               </div>
               <div>
                 <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Pilihan Blok / Jalan</label>
-                <select id="sensusBlok" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <select id="sensusBlok" onchange="handleSensusBlokChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
                   <option value="Ciskul I">Ciskul I</option>
                   <option value="Ciskul 6">Ciskul 6</option>
                   <option value="Ciskul 7">Ciskul 7</option>
                   <option value="Ciskul 8">Ciskul 8</option>
                   <option value="Ciskul 9" selected>Ciskul 9</option>
                   <option value="Ciskul 10">Ciskul 10</option>
+                  <option value="Gemani">Gemani</option>
                 </select>
               </div>
               <div>
                 <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Nomor Rumah (1-70)</label>
-                <select id="sensusNoRumah" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
-                  ${Array.from({length: 70}, (_, i) => `<option value="No. ${i+1}" ${i === 13 ? 'selected' : ''}>No. ${i+1}</option>`).join('')}
+                <select id="sensusNoRumah" onchange="handleSensusNoRumahChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
+                  ${getSensusNoRumahOptionsHtml('Ciskul 9', 'No. 1')}
                 </select>
               </div>
+            </div>
+
+            <!-- Banner Status Ketersediaan Nomor Rumah -->
+            <div id="sensusStatusBanner">
+              ${getSensusStatusBannerHtml('Ciskul 9', 'No. 1')}
+            </div>
+
+            <!-- Panel Highlight Nomor Rumah Terdaftar di Blok Terpilih -->
+            <div id="sensusHighlightContainer" class="p-3.5 bg-slate-50/90 rounded-2xl border border-slate-200">
+              ${getSensusHighlightPanelHtml('Ciskul 9')}
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -2873,16 +3184,14 @@ function handleSensusSubmit(e) {
   const jiwaEl = document.getElementById('sensusJiwa');
   const jiwa = jiwaEl ? (Number(jiwaEl.value) || 1) : 1;
 
-  // Validasi Anti Duplikasi
-  const namaSudahAda = db.warga.some(w => w.nama.toLowerCase().trim() === nama.toLowerCase());
-  if (namaSudahAda) {
-    showToast(`Input Ditolak: Nama KK "${nama}" sudah terdaftar di sistem RT 04!`, 'error');
-    return;
-  }
-
-  const rumahSudahAda = db.warga.find(w => w.noRumah.toLowerCase().trim() === noRumah.toLowerCase());
+  // Catatan: Nama KK yang sama DIPERBOLEHKAN karena pembedanya adalah nomor rumah.
+  // Validasi Anti Duplikasi Nomor Rumah (1 Nomor Rumah = 1 KK)
+  const rumahSudahAda = findWargaByNoRumah(noRumah);
   if (rumahSudahAda) {
-    showToast(`Input Ditolak: Alamat "${noRumah}" sudah terdaftar atas nama KK ${rumahSudahAda.nama}!`, 'error');
+    showToast(`Input Ditolak: Nomor rumah "${noRumah}" telah digunakan (terdaftar atas nama KK ${rumahSudahAda.nama})!`, 'error');
+    handleSensusNoRumahChange();
+    const bannerEl = document.getElementById('sensusStatusBanner');
+    if (bannerEl) bannerEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
 
@@ -2981,6 +3290,13 @@ function konfirmasiHapusWarga(id) {
   renderApp();
 }
 
+function handleEditWargaBlokChange(excludeId) {
+  const blokEl = document.getElementById('editWargaBlok');
+  const noEl = document.getElementById('editWargaNo');
+  if (!blokEl || !noEl) return;
+  noEl.innerHTML = getSensusNoRumahOptionsHtml(blokEl.value, noEl.value, excludeId);
+}
+
 // Modal Edit Data Warga
 function openModalEditWarga(id) {
   if (!isPengurus()) {
@@ -2990,10 +3306,19 @@ function openModalEditWarga(id) {
   const w = db.warga.find(x => x.id === id);
   if (!w) return;
 
-  const splitAlamat = (w.noRumah || '').split(' ');
-  let currentBlok = splitAlamat[0] && splitAlamat[1] ? `${splitAlamat[0]} ${splitAlamat[1]}` : 'Ciskul 9';
-  if (currentBlok === 'Ciskul 1') currentBlok = 'Ciskul I';
-  const currentNo = splitAlamat.slice(2).join(' ') || 'No. 1';
+  let currentBlok = 'Ciskul 9';
+  let currentNo = 'No. 1';
+  if (w.noRumah) {
+    if (w.noRumah.startsWith('Gemani')) {
+      currentBlok = 'Gemani';
+      currentNo = w.noRumah.replace('Gemani', '').trim();
+    } else {
+      const splitAlamat = w.noRumah.split(' ');
+      currentBlok = splitAlamat[0] && splitAlamat[1] ? `${splitAlamat[0]} ${splitAlamat[1]}` : 'Ciskul 9';
+      if (currentBlok === 'Ciskul 1') currentBlok = 'Ciskul I';
+      currentNo = splitAlamat.slice(2).join(' ') || 'No. 1';
+    }
+  }
 
   const html = `
     <div class="space-y-4 text-left">
@@ -3011,28 +3336,26 @@ function openModalEditWarga(id) {
         <div>
           <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Nama Kepala Keluarga (KK)</label>
           <input type="text" id="editWargaNama" required value="${w.nama}" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <p class="text-[10px] text-slate-400 mt-1">Nama boleh sama dengan warga lain (pembeda: nomor rumah).</p>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Pilihan Blok / Jalan</label>
-            <select id="editWargaBlok" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
+            <select id="editWargaBlok" onchange="handleEditWargaBlokChange('${w.id}')" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
               <option value="Ciskul I" ${currentBlok === 'Ciskul I' ? 'selected' : ''}>Ciskul I</option>
               <option value="Ciskul 6" ${currentBlok === 'Ciskul 6' ? 'selected' : ''}>Ciskul 6</option>
               <option value="Ciskul 7" ${currentBlok === 'Ciskul 7' ? 'selected' : ''}>Ciskul 7</option>
               <option value="Ciskul 8" ${currentBlok === 'Ciskul 8' ? 'selected' : ''}>Ciskul 8</option>
               <option value="Ciskul 9" ${currentBlok === 'Ciskul 9' ? 'selected' : ''}>Ciskul 9</option>
               <option value="Ciskul 10" ${currentBlok === 'Ciskul 10' ? 'selected' : ''}>Ciskul 10</option>
+              <option value="Gemani" ${currentBlok === 'Gemani' ? 'selected' : ''}>Gemani</option>
             </select>
           </div>
           <div>
             <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Nomor Rumah (1-70)</label>
             <select id="editWargaNo" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
-              ${Array.from({length: 70}, (_, i) => {
-                const numStr = `No. ${i+1}`;
-                const isSel = currentNo === numStr || parseInt(currentNo.replace(/\D/g, '')) === (i+1);
-                return `<option value="${numStr}" ${isSel ? 'selected' : ''}>${numStr}</option>`;
-              }).join('')}
+              ${getSensusNoRumahOptionsHtml(currentBlok, currentNo, w.id)}
             </select>
           </div>
         </div>
@@ -3106,16 +3429,11 @@ function handleEditWargaSubmit(e, id) {
   const anak = w.anak || '-';
   const ortu = w.ortu || '-';
 
-  // Validasi bentrok
-  const namaSudahAda = db.warga.some(x => x.id !== id && x.nama.toLowerCase().trim() === namaBaru.toLowerCase());
-  if (namaSudahAda) {
-    showToast(`Koreksi Ditolak: Nama KK "${namaBaru}" sudah digunakan warga lain!`, 'error');
-    return;
-  }
-
-  const rumahSudahAda = db.warga.find(x => x.id !== id && x.noRumah.toLowerCase().trim() === noRumahBaru.toLowerCase());
+  // Catatan: Nama KK yang sama diperbolehkan karena pembeda uniknya adalah nomor rumah.
+  // Validasi Anti Duplikasi Nomor Rumah:
+  const rumahSudahAda = findWargaByNoRumah(noRumahBaru, id);
   if (rumahSudahAda) {
-    showToast(`Koreksi Ditolak: Alamat "${noRumahBaru}" sudah terdaftar atas nama KK ${rumahSudahAda.nama}!`, 'error');
+    showToast(`Koreksi Ditolak: Nomor rumah "${noRumahBaru}" telah digunakan (terdaftar atas nama KK ${rumahSudahAda.nama})!`, 'error');
     return;
   }
 
@@ -4617,7 +4935,7 @@ function initBerandaKependudukanCharts() {
   const canvasBlok = document.getElementById('chartBerandaDistribusiBlok');
   const canvasDemografi = document.getElementById('chartBerandaDemografi');
 
-  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10'];
+  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
   const blokCounts = blokNames.map(b => db.warga.filter(w => w.noRumah && (w.noRumah.includes(b) || (b === 'Ciskul I' && /\bCiskul 1\b/i.test(w.noRumah)))).length);
   const tetap = db.warga.filter(w => w.status === 'Tetap').length;
   const kontrak = db.warga.filter(w => w.status === 'Kontrak').length;
@@ -4627,7 +4945,7 @@ function initBerandaKependudukanCharts() {
     berandaDistribusiBlokChartInstance = new Chart(canvasBlok, {
       type: 'bar',
       data: {
-        labels: ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10'],
+        labels: ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'],
         datasets: [{
           label: 'Jumlah KK',
           data: blokCounts,
@@ -4637,7 +4955,8 @@ function initBerandaKependudukanCharts() {
             '#6366f1', // Ciskul 7: Indigo
             '#8b5cf6', // Ciskul 8: Purple
             '#10b981', // Ciskul 9: Emerald
-            '#f59e0b'  // Ciskul 10: Amber
+            '#f59e0b', // Ciskul 10: Amber
+            '#ec4899'  // Gemani: Pink / Rose
           ],
           hoverBackgroundColor: [
             '#0891b2',
@@ -4645,7 +4964,8 @@ function initBerandaKependudukanCharts() {
             '#4f46e5',
             '#7c3aed',
             '#059669',
-            '#d97706'
+            '#d97706',
+            '#db2777'
           ],
           borderRadius: 8,
           borderSkipped: false
@@ -4899,7 +5219,7 @@ function initBlokChart() {
   if (!canvas || typeof Chart === 'undefined') return;
   if (blokChartInstance) blokChartInstance.destroy();
 
-  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10'];
+  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
   const blokCounts = blokNames.map(b => db.warga.filter(w => w.noRumah && (w.noRumah.includes(b) || (b === 'Ciskul I' && /\bCiskul 1\b/i.test(w.noRumah)))).length);
 
   blokChartInstance = new Chart(canvas, {
