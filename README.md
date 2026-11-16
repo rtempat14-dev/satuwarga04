@@ -23,7 +23,7 @@
    - Grafik interaktif tren arus kas bulanan berbasis Chart.js.
    - **Seksi Demografi & Kependudukan RT 04**:
      - 4 Bento Cards dengan warna-warni menarik (Total KK, Total Jiwa, Rasio Warga Tetap, Blok Terpadat).
-     - **Grafik Sebaran Blok Jalan**: Bar Chart interaktif sebaran KK di wilayah Ciskul I, Ciskul 6 s.d. Ciskul 10, Gemani.
+     - **Grafik Sebaran Blok Jalan**: Bar Chart interaktif sebaran KK di wilayah Ciskul I, Ciskul 6 s.d. Ciskul 10.
      - **Grafik Komposisi Status Hunian**: Doughnut Chart perbandingan warga tetap vs warga kontrak/sewa.
      - **Tombol Pintas Navigasi Blok**: Akses 1-klik untuk menyaring direktori warga langsung berdasarkan blok jalan yang dipilih.
    - **Radar Tunggakan Iuran**:
@@ -49,22 +49,33 @@
    - **Cetak Kwitansi Iuran Digital** bukti pelunasan warga.
    - Grafik realisasi iuran bulanan KK.
 
-5. **Kependudukan & e-Sensus Mandiri**:
-   - **Direktori KK**: Pencarian cepat nama KK & nomor rumah, filter status (Tetap/Kontrak), filter per blok jalan (Ciskul I, Ciskul 6 s.d. Ciskul 10, Gemani).
+5. **Self-Hosted Payment Gateway RT 04 (QRIS & Rekening Kas RT)**:
+   - **Portal Pembayaran Mandiri Warga**: Warga dapat membayar iuran bulanan RT 04 secara mandiri tanpa perantara pihak ketiga (0% fee transaksi, bebas potongan admin).
+   - **Metode Pembayaran QRIS Nasional RT 04**: Scan instan menggunakan GoPay, OVO, Dana, ShopeePay, LinkAja, BCA Mobile, Livin Mandiri, BRImo, BSI Mobile, BJB Digi, dan seluruh m-Banking berstandar QRIS Nasional.
+   - **Metode Pembayaran Transfer Rekening Bank Kas RT**: Rekening resmi kas RT 04 dilengkapi visual kartu debit, nomor rekening font JetBrains Mono, tombol 1-klik salin nomor rekening, dan panduan transfer.
+   - **Smart Billing & Kode Unik Otomatis**: Generator kode unik 3 digit otomatis untuk pencocokan mutasi kas m-banking secara instan dan akurat tanpa tertukar antar warga.
+   - **Konfirmasi Pembayaran & Unggah Bukti**: Warga dapat melampirkan foto struk/screenshot transfer dengan kompresi gambar otomatis di browser, serta tombol 1-klik kirim konfirmasi ke WhatsApp Bendahara RT dengan draf pesan rapi.
+   - **Pelacakan Status & Kwitansi Digital Resmi**: Lacak status transaksi (*Menunggu Verifikasi*, *Terverifikasi Lunas*, *Ditolak*), pratinjau nota invoice digital, dan cetak Kwitansi Resmi RT 04 berstandar PDF/cetak.
+   - **Panel Verifikasi Pengurus / Bendahara**: Antrean verifikasi pembayaran masuk dengan pratinjau bukti transfer beresolusi tinggi, tombol **"Setujui & Lunaskan"** yang secara otomatis menandai lunas di Kartu Kendali Iuran warga dan mencatat pemasukan mutasi di Buku Kas RT.
+   - **Pengaturan Payment Gateway di Panel Admin**: Konfigurasi nama bank kas RT, nomor rekening RT, atas nama rekening, nama merchant QRIS, NMID, upload gambar QRIS kustom, dan nomor WhatsApp konfirmasi bendahara.
+
+6. **Kependudukan & e-Sensus Mandiri**:
+   - **Direktori KK**: Pencarian cepat nama KK & nomor rumah, filter status (Tetap/Kontrak), filter per blok jalan (Ciskul I, Ciskul 6 s.d. Ciskul 10).
    - **e-KTP Digital Warga**: Kartu tanda identitas digital lingkungan resmi tingkat RT.
    - **e-Sensus Mandiri**: Formulir warga praktis dengan pencegahan data ganda (anti-duplikasi).
    - **Statistik Demografi**: Diagram komposisi status hunian dan distribusi warga per blok.
 
-6. **Layanan Surat Pengantar & Aspirasi**:
+7. **Layanan Surat Pengantar & Aspirasi**:
    - Permohonan surat keterangan domisili, pengantar nikah, SKTM, SKU, pengantar KTP/KK.
    - Alur persetujuan pengurus dan tombol **Cetak Surat Pengantar Resmi (PDF)** dengan kop dan tanda tangan Ketua RT.
    - Form pengaduan sarana prasarana lingkungan.
 
-7. **Panel Super Admin & Keamanan**:
+8. **Panel Super Admin & Keamanan**:
    - Manajemen akun login pengurus.
    - Konfigurasi tarif iuran per bulan.
+   - Konfigurasi Payment Gateway Rekening RT & QRIS.
    - Kustomisasi kop surat, nomor surat, dan nama pejabat penandatangan.
-   - **Audit Trail & Event Log**: Catatan riwayat aktivitas login, mutasi kas, iuran, e-sensus, dan perubahan sistem, dilengkapi pencarian real-time, filter kategori/tingkat, serta tombol **Ekspor CSV**.
+   - **Audit Trail & Event Log**: Catatan riwayat aktivitas login, mutasi kas, iuran, e-sensus, gateway pembayaran, dan perubahan sistem, dilengkapi pencarian real-time, filter kategori/tingkat, serta tombol **Ekspor CSV**.
    - **Cadangan Data JSON**: Ekspor dan impor cadangan data sistem.
 
 ---

@@ -37,7 +37,7 @@ const VIEW_MODE_KEY = 'SATUWARGA04_VIEW_MODE';
 let currentViewMode = localStorage.getItem(VIEW_MODE_KEY) || (window.innerWidth >= 1024 ? 'desktop' : 'mobile');
 let currentUser = null; // null = Mode Warga (Akses Terbuka Tanpa Login)
 let activeTab = 'beranda';
-let adminSubTab = 'pengurus'; // 'pengurus' | 'keuangan' | 'surat' | 'sistem' | 'log'
+let adminSubTab = 'pengurus'; // 'pengurus' | 'keuangan' | 'gateway' | 'surat' | 'sistem' | 'log'
 let logSearchQuery = '';
 let logFilterKategori = 'semua';
 let logFilterTipe = 'semua';
@@ -48,6 +48,17 @@ let wargaSearchQuery = '';
 let wargaFilterStatus = 'semua'; // 'semua' | 'Tetap' | 'Kontrak'
 let wargaFilterBlok = 'semua'; // 'semua' | 'Ciskul I' | 'Ciskul 6' | 'Ciskul 7' | ...
 let subTabWarga = 'direktori'; // 'direktori' | 'statistik' | 'sensus'
+
+// State Payment Gateway Self-Hosted RT 04 (QRIS & Transfer Rekening Bank RT)
+let subTabBayar = 'portal'; // 'portal' | 'riwayat' | 'verifikasi'
+let bayarSelectedWargaId = '';
+let bayarSelectedBulan = [];
+let bayarMetode = 'qris'; // 'qris' | 'bank'
+let bayarKodeUnik = 0;
+let bayarUploadedBuktiBase64 = '';
+let bayarSearchFilter = '';
+let bayarRiwayatSearch = '';
+let bayarRiwayatFilterStatus = 'semua';
 
 // Chart Instances
 let demografiChartInstance = null;
@@ -123,11 +134,54 @@ const sampleWargaData = [
 
 // Sample Event Logs Awal untuk Audit Trail Sistem
 const defaultLogsData = [
+  { id: 'LOG-106', waktu: '2026-10-25 10:00:22', user: 'H. Ahmad Sobari', role: 'Bendahara RT', kategori: 'GATEWAY', pesan: 'Verifikasi pelunasan iuran via QRIS RT a.n Bambang Sudarsono (INV-202610-001)', tipe: 'success' },
   { id: 'LOG-105', waktu: '2026-10-24 14:35:10', user: 'Super Admin RT 04', role: 'Administrator', kategori: 'AUTH', pesan: 'Masuk ke panel pengaturan & konfigurasi super user', tipe: 'info' },
   { id: 'LOG-104', waktu: '2026-10-24 13:20:45', user: 'H. Ahmad Sobari', role: 'Bendahara RT', kategori: 'IURAN', pesan: 'Penerimaan pembayaran iuran bulanan warga Ciskul 9 No. 14', tipe: 'success' },
   { id: 'LOG-103', waktu: '2026-10-24 11:15:30', user: 'Siti Rahmawati', role: 'Sekretaris RT', kategori: 'WARGA', pesan: 'Pembaruan opsi nomor rumah (1-70) di direktori KK', tipe: 'info' },
   { id: 'LOG-102', waktu: '2026-10-24 09:40:12', user: 'H. Ahmad Sobari', role: 'Bendahara RT', kategori: 'KAS', pesan: 'Pencatatan pengeluaran kas: Honor Satpam & Petugas Kebersihan', tipe: 'warning' },
   { id: 'LOG-101', waktu: '2026-10-23 20:05:00', user: 'Super Admin RT 04', role: 'Administrator', kategori: 'SISTEM', pesan: 'Sinkronisasi database cloud Google Spreadsheet berhasil', tipe: 'success' }
+];
+
+// Data Bawaan Transaksi Self-Hosted Payment Gateway RT 04
+const defaultPembayaranData = [
+  {
+    id: 'INV-202610-001',
+    wargaId: 'W01',
+    namaWarga: 'Bambang Sudarsono',
+    noRumah: 'Ciskul 9 No. 14',
+    telp: '08122334455',
+    bulanList: [`Oktober ${CURRENT_YEAR}`],
+    nominalIuran: 75000,
+    kodeUnik: 124,
+    totalBayar: 75124,
+    metode: 'qris',
+    status: 'Lunas',
+    tglTransaksi: `${CURRENT_YEAR}-10-24 09:30:15`,
+    tglVerifikasi: `${CURRENT_YEAR}-10-24 10:00:22`,
+    verifikator: 'H. Ahmad Sobari (Bendahara RT)',
+    namaPengirim: 'Bambang Sudarsono',
+    buktiBayar: '',
+    catatan: 'Pembayaran iuran rutin bulanan via QRIS BCA'
+  },
+  {
+    id: 'INV-202610-002',
+    wargaId: 'W04',
+    namaWarga: 'Yohanes Kristianto',
+    noRumah: 'Ciskul 7 No. 05',
+    telp: '08137788990',
+    bulanList: [`Oktober ${CURRENT_YEAR}`, `November ${CURRENT_YEAR}`],
+    nominalIuran: 150000,
+    kodeUnik: 318,
+    totalBayar: 150318,
+    metode: 'bank',
+    status: 'Menunggu Verifikasi',
+    tglTransaksi: `${CURRENT_YEAR}-10-25 08:15:40`,
+    tglVerifikasi: '-',
+    verifikator: '-',
+    namaPengirim: 'Yohanes Kristianto',
+    buktiBayar: '',
+    catatan: 'Transfer via m-banking Mandiri a.n Yohanes'
+  }
 ];
 
 let db = {
@@ -141,6 +195,7 @@ let db = {
   warga: [...sampleWargaData],
   kas: JSON.parse(JSON.stringify(defaultKasData)),
   iuran: JSON.parse(JSON.stringify(defaultIuranData)),
+  pembayaran: [...defaultPembayaranData],
   agenda: [
     { id: 'A01', judul: 'Kerja Bakti Lingkungan Ciskul', tanggal: `${CURRENT_YEAR}-${String(CURRENT_MONTH_IDX + 1).padStart(2, '0')}-15`, jam: '07:30 WIB', lokasi: 'Fasum Lapangan RT 04', info: 'Pembersihan saluran drainase menjelang musim hujan dan pemangkasan dahan pohon.' },
     { id: 'A02', judul: 'Pertemuan Rutin Warga & Rembug Warga', tanggal: `${CURRENT_YEAR}-${String(CURRENT_MONTH_IDX + 1).padStart(2, '0')}-20`, jam: '19:30 WIB', lokasi: 'Balai Pertemuan RT 04', info: 'Laporan pertanggungjawaban kas bulanan dan musyawarah jadwal pos ronda malam.' }
@@ -170,7 +225,19 @@ let appConfig = {
   tarifIuran: 75000,
   kontakRt: '6281234567890',
   kontakBendahara: '6281234567891',
-  kontakSekretaris: '6281234567892'
+  kontakSekretaris: '6281234567892',
+  
+  // Konfigurasi Self-Hosted Payment Gateway RT 04
+  pgAktif: true,
+  pgNamaBank: 'Bank Mandiri',
+  pgNoRekening: '131-00-140414-9',
+  pgAtasNama: 'KAS RT 04 CISKUL / H. AHMAD SOBARI',
+  pgQrisMerchant: 'RT 04 RW 14 CISARANTEN KULON',
+  pgQrisNmid: 'ID102604140001',
+  pgQrisImg: '',
+  pgPetunjuk: 'Mohon transfer nominal tepat beserta 3 digit kode unik agar sistem verifikasi bendahara dapat mencocokkan pembayaran Anda secara instan.',
+  pgGunakanKodeUnik: true,
+  pgWaKonfirmasi: '6281234567891'
 };
 
 // Cek LocalStorage untuk persistensi offline
@@ -190,6 +257,9 @@ function loadLocalStorageData() {
         }
         if (!Array.isArray(db.logs) || db.logs.length === 0) {
           db.logs = [...defaultLogsData];
+        }
+        if (!Array.isArray(db.pembayaran) || db.pembayaran.length === 0) {
+          db.pembayaran = [...defaultPembayaranData];
         }
       }
     }
@@ -400,10 +470,29 @@ async function muatDataDariSheets(showSuccessToast = false) {
           respon: l.Respon || ''
         }));
       }
+      if (json.data.pembayaran && json.data.pembayaran.length > 0) {
+        db.pembayaran = json.data.pembayaran.map(p => ({
+          id: p.ID,
+          wargaId: p.WargaID,
+          namaWarga: p.Nama,
+          noRumah: p.NoRumah,
+          bulanList: typeof p.BulanList === 'string' ? p.BulanList.split(',').map(s => s.trim()) : (Array.isArray(p.BulanList) ? p.BulanList : []),
+          nominalIuran: Number(p.NominalIuran) || 0,
+          kodeUnik: Number(p.KodeUnik) || 0,
+          totalBayar: Number(p.TotalBayar) || 0,
+          metode: p.Metode || 'qris',
+          status: p.Status || 'Menunggu Verifikasi',
+          tglTransaksi: formatTanggalSheets(p.TglTransaksi),
+          tglVerifikasi: formatTanggalSheets(p.TglVerifikasi),
+          verifikator: p.Verifikator || '-',
+          namaPengirim: p.NamaPengirim || p.Nama,
+          catatan: p.Catatan || ''
+        }));
+      }
       if (json.data.config && json.data.config.length > 0) {
         json.data.config.forEach(c => {
           if (c.Key && c.Value !== undefined) {
-            appConfig[c.Key] = c.Key === 'tarifIuran' ? Number(c.Value) : c.Value;
+            appConfig[c.Key] = c.Key === 'tarifIuran' ? Number(c.Value) : (c.Value === 'true' ? true : (c.Value === 'false' ? false : c.Value));
           }
         });
       }
@@ -635,10 +724,13 @@ function renderDesktopNav() {
   const container = document.getElementById('desktopNavBar');
   if (!container) return;
 
+  const pendingCount = (db.pembayaran || []).filter(p => p.status === 'Menunggu Verifikasi').length;
+
   const navItems = [
     { tab: 'beranda', label: 'Beranda', icon: 'ph-house' },
     { tab: 'kas', label: 'Buku Kas', icon: 'ph-wallet' },
     { tab: 'iuran', label: 'Iuran Warga', icon: 'ph-receipt' },
+    { tab: 'bayar', label: 'Bayar Iuran', icon: 'ph-credit-card', isGateway: true, badge: 'QRIS', count: pendingCount },
     { tab: 'warga', label: 'Warga RT', icon: 'ph-users' },
     { tab: 'layanan', label: 'Layanan', icon: 'ph-chat-circle-dots' }
   ];
@@ -649,14 +741,24 @@ function renderDesktopNav() {
 
   container.innerHTML = navItems.map(item => {
     const isActive = activeTab === item.tab;
+    const isGateway = item.isGateway;
     return `
-      <button onclick="switchTab('${item.tab}')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center space-x-1.5 flex-shrink-0 ${
+      <button onclick="switchTab('${item.tab}')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center space-x-1.5 flex-shrink-0 relative ${
         isActive 
-          ? 'bg-brand-600 text-white shadow-md shadow-brand-600/30 scale-[1.02] font-black' 
-          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-bold'
+          ? (isGateway ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/30 scale-[1.02] font-black' : 'bg-brand-600 text-white shadow-md shadow-brand-600/30 scale-[1.02] font-black') 
+          : (isGateway ? 'text-emerald-800 bg-emerald-50/80 hover:bg-emerald-100 hover:text-emerald-900 border border-emerald-200/60 font-bold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-bold')
       }">
-        <i class="ph-bold ${item.icon} text-sm ${isActive ? 'text-white' : 'text-slate-500'}"></i>
+        <i class="ph-bold ${item.icon} text-sm ${isActive ? 'text-white' : (isGateway ? 'text-emerald-600' : 'text-slate-500')}"></i>
         <span>${item.label}</span>
+        ${item.count > 0 ? `
+          <span class="ml-1 px-1.5 py-0.2 rounded-full text-[9px] font-black bg-rose-500 text-white animate-pulse">
+            ${item.count}
+          </span>
+        ` : (item.badge && !isActive ? `
+          <span class="ml-0.5 text-[8.5px] font-black px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+            ${item.badge}
+          </span>
+        ` : '')}
       </button>
     `;
   }).join('');
@@ -704,6 +806,7 @@ function renderApp() {
   }
   if (activeTab === 'kas') setTimeout(initKasChart, 120);
   if (activeTab === 'iuran') setTimeout(initIuranChart, 120);
+  if (activeTab === 'bayar') setTimeout(initQrisCode, 120);
   if (activeTab === 'warga' && subTabWarga === 'statistik') {
     setTimeout(() => {
       initDemografiChart();
@@ -768,24 +871,33 @@ function renderHeaderAuth() {
 function renderBottomNav() {
   const navWrapper = document.getElementById('navItemWrapper');
   if (!navWrapper) return;
+  const pendingCount = (db.pembayaran || []).filter(p => p.status === 'Menunggu Verifikasi').length;
+
   const navItems = [
     { tab: 'beranda', label: 'Beranda', icon: 'ph-house' },
     { tab: 'kas', label: 'Buku Kas', icon: 'ph-wallet' },
     { tab: 'iuran', label: 'Iuran', icon: 'ph-receipt' },
+    { tab: 'bayar', label: 'Bayar', icon: 'ph-credit-card', isSpecial: true, count: pendingCount },
     { tab: 'warga', label: 'Warga', icon: 'ph-users' },
     { tab: 'layanan', label: 'Layanan', icon: 'ph-chat-circle-dots' }
   ];
 
+  navWrapper.className = 'grid grid-cols-6 gap-0.5 text-center';
   navWrapper.innerHTML = navItems.map(item => {
     const isActive = activeTab === item.tab;
+    const isSpecial = item.isSpecial;
     return `
-      <button onclick="switchTab('${item.tab}')" class="flex flex-col items-center justify-center py-1 rounded-2xl transition-all duration-200 ${
+      <button onclick="switchTab('${item.tab}')" class="flex flex-col items-center justify-center py-1 rounded-2xl transition-all duration-200 relative ${
         isActive 
-          ? 'text-brand-700 font-black scale-105 bg-brand-50/80 shadow-xs' 
-          : 'text-slate-500 hover:text-slate-800 font-semibold'
+          ? (isSpecial ? 'text-emerald-700 font-black scale-105 bg-emerald-50/90 shadow-xs' : 'text-brand-700 font-black scale-105 bg-brand-50/80 shadow-xs') 
+          : (isSpecial ? 'text-emerald-700 hover:text-emerald-900 font-bold bg-emerald-50/40' : 'text-slate-500 hover:text-slate-800 font-semibold')
       }">
-        <i class="ph-bold ${item.icon} text-xl ${isActive ? 'text-brand-600' : ''}"></i>
-        <span class="text-[10px] mt-0.5 tracking-tight">${item.label}</span>
+        <i class="ph-bold ${item.icon} text-xl ${isActive ? (isSpecial ? 'text-emerald-600' : 'text-brand-600') : (isSpecial ? 'text-emerald-600' : '')}"></i>
+        <span class="text-[9px] mt-0.5 tracking-tight ${isSpecial ? 'font-black text-emerald-800' : ''}">${item.label}</span>
+        ${item.count > 0 ? `
+          <span class="absolute top-0.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+          <span class="absolute top-0.5 right-1.5 w-2 h-2 rounded-full bg-rose-500"></span>
+        ` : ''}
       </button>
     `;
   }).join('');
@@ -802,6 +914,8 @@ function renderMainContent() {
     main.innerHTML = renderKas();
   } else if (activeTab === 'iuran') {
     main.innerHTML = renderIuran();
+  } else if (activeTab === 'bayar') {
+    main.innerHTML = renderBayarIuran();
   } else if (activeTab === 'warga') {
     main.innerHTML = renderWarga();
   } else if (activeTab === 'layanan') {
@@ -852,6 +966,10 @@ function renderBeranda() {
               <i class="ph-bold ph-receipt text-brand-600"></i>
               <span>Cek Iuran</span>
             </button>
+            <button onclick="subTabBayar = 'portal'; switchTab('bayar');" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-300 via-teal-300 to-cyan-300 text-slate-950 text-xs font-black shadow-lg hover:brightness-105 transition active:scale-95 flex items-center gap-1.5 border border-white/40">
+              <i class="ph-bold ph-credit-card text-emerald-950 text-sm"></i>
+              <span>💳 Bayar Iuran (QRIS / Rekening RT)</span>
+            </button>
             <button onclick="openModalTambahLaporanBeranda()" class="px-3 py-1.5 rounded-xl bg-brand-950/40 hover:bg-brand-950/60 text-white text-xs font-bold transition active:scale-95 flex items-center gap-1.5 border border-white/20">
               <i class="ph-bold ph-megaphone text-emerald-300"></i>
               <span>Lapor Masalah</span>
@@ -863,6 +981,36 @@ function renderBeranda() {
           </div>
         </div>
         <i class="ph-duotone ph-buildings absolute -right-6 -bottom-8 text-9xl text-white/10 pointer-events-none"></i>
+      </div>
+
+      <!-- Banner Sorotan: Self-Hosted Payment Gateway RT 04 -->
+      <div class="bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 border border-emerald-500/30 rounded-3xl p-4 sm:p-5 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden">
+        <div class="flex items-center space-x-3.5 z-10 w-full md:w-auto">
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 text-slate-950 flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/20">
+            <i class="ph-bold ph-qr-code text-2xl"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="text-xs font-black uppercase tracking-wider text-emerald-300 font-display">Portal Pembayaran Mandiri (Self-Hosted Gateway)</h3>
+              <span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">0% Biaya Admin</span>
+              <span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">QRIS & Bank RT</span>
+            </div>
+            <p class="text-xs text-slate-300 mt-0.5 leading-relaxed">
+              Bayar iuran RT tanpa antre melalui rekening resmi kas RT atau scan QRIS langsung dari HP. Otomatis masuk catatan iuran & kwitansi instan.
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2 z-10 w-full md:w-auto justify-end flex-shrink-0">
+          <button onclick="subTabBayar = 'portal'; switchTab('bayar');" class="flex-1 md:flex-none px-4 py-2.5 bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 rounded-xl text-xs font-black shadow-md transition active:scale-95 flex items-center justify-center gap-1.5">
+            <i class="ph-bold ph-credit-card text-sm"></i>
+            <span>Bayar Iuran Online</span>
+          </button>
+          <button onclick="subTabBayar = 'riwayat'; switchTab('bayar');" class="px-3.5 py-2.5 bg-slate-800/90 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition active:scale-95 flex items-center gap-1.5">
+            <i class="ph-bold ph-receipt text-sm"></i>
+            <span>Cek Status / Kwitansi</span>
+          </button>
+        </div>
+        <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
       </div>
 
       <!-- Bento Grid: Saldo Kas & Statistik Lingkungan -->
@@ -1056,7 +1204,7 @@ function renderDashboardKependudukanSection() {
   const pctKontrak = totalKK > 0 ? Math.round((kontrakCount / totalKK) * 100) : 0;
   const avgJiwa = totalKK > 0 ? (totalJiwa / totalKK).toFixed(1) : '0.0';
 
-  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
+  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10'];
   const blokData = blokNames.map(b => ({
     nama: b,
     count: db.warga.filter(w => w.noRumah && (w.noRumah.includes(b) || (b === 'Ciskul I' && /\bCiskul 1\b/i.test(w.noRumah)))).length
@@ -1160,10 +1308,10 @@ function renderDashboardKependudukanSection() {
                 <i class="ph-bold ph-chart-bar text-sky-600"></i>
                 Sebaran KK per Blok Jalan
               </h4>
-              <p class="text-[10px] text-slate-400">Distribusi wilayah RT 04 (Ciskul & Gemani)</p>
+              <p class="text-[10px] text-slate-400">Distribusi wilayah Ciskul I s.d. Ciskul 10</p>
             </div>
             <span class="text-[9px] font-black px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 border border-sky-200">
-              ${blokNames.length} Blok / Jalan
+              6 Blok
             </span>
           </div>
           <div class="relative w-full h-44">
@@ -1338,7 +1486,7 @@ function renderDashboardTunggakanSection() {
                 </p>
               </div>
               <div class="flex items-center space-x-1.5 flex-wrap">
-                <button onclick="openModalKartuIuran('${w.nama.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition shadow-2xs">
+                <button onclick="openModalKartuIuran('${w.id}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition shadow-2xs">
                   Kartu Iuran
                 </button>
                 ${isPengurus() && w.telp ? `
@@ -2022,7 +2170,11 @@ function renderIuran() {
           <h2 class="text-base font-black text-slate-900 font-display">Rekap Iuran Warga (2026-2036)</h2>
           <p class="text-[11px] text-slate-500">Kartu kendali iuran bulanan dan catatan pembayaran 11 tahun</p>
         </div>
-        <div class="flex items-center space-x-2">
+        <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+          <button onclick="subTabBayar = 'portal'; switchTab('bayar');" class="px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl text-xs font-black transition shadow-md flex items-center space-x-1.5 active:scale-95">
+            <i class="ph-bold ph-credit-card text-base"></i>
+            <span>💳 Bayar Iuran Online (QRIS & Bank)</span>
+          </button>
           ${canManageIuran() ? `
             <button onclick="bukaModalResetIuran()" class="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1 active:scale-95">
               <i class="ph-bold ph-arrow-counter-clockwise text-sm"></i>
@@ -2107,7 +2259,7 @@ function renderIuran() {
                     </div>
                     <p class="text-[11px] text-slate-500 mt-0.5">${w.noRumah} • <span class="text-brand-700 font-bold">${lunasCount} Bln</span></p>
                   </div>
-                  <button onclick="openModalKartuIuran('${w.nama.replace(/'/g, "\\'")}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-2xs transition active:scale-95 flex items-center gap-1 flex-shrink-0">
+                  <button onclick="openModalKartuIuran('${w.id}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-2xs transition active:scale-95 flex items-center gap-1 flex-shrink-0">
                     <i class="ph-bold ph-credit-card text-brand-600"></i>
                     <span>Kartu</span>
                   </button>
@@ -2207,14 +2359,19 @@ function handleCatatIuranSubmit(e) {
 }
 
 // Modal Kartu Kendali Iuran Warga (11 Tahun: 2026 - 2036)
-function openModalKartuIuran(namaWarga) {
-  const wargaObj = db.warga.find(w => w.nama.toLowerCase().trim() === namaWarga.toLowerCase().trim()) || { nama: namaWarga, noRumah: '-' };
+function openModalKartuIuran(identifier) {
+  const wargaObj = db.warga.find(w => w.id === identifier || w.nama.toLowerCase().trim() === String(identifier).toLowerCase().trim()) || { id: identifier, nama: identifier, noRumah: '-' };
+  const namaWarga = wargaObj.nama;
+  const targetId = wargaObj.id || namaWarga;
   const tahunDipilih = modalKartuTahun || CURRENT_YEAR;
   const daftarBulan = NAMA_BULAN_ID.map(b => `${b} ${tahunDipilih}`);
 
   const lunasSet = new Set(
     db.iuran
-      .filter(i => i.nama.toLowerCase().trim() === namaWarga.toLowerCase().trim() && i.status === 'Lunas')
+      .filter(i => {
+        const matchW = (wargaObj.id && i.wargaId && i.wargaId === wargaObj.id) || i.nama.toLowerCase().trim() === namaWarga.toLowerCase().trim();
+        return matchW && i.status === 'Lunas';
+      })
       .map(i => i.bulan)
   );
 
@@ -2233,14 +2390,14 @@ function openModalKartuIuran(namaWarga) {
 
       <!-- Selector Tahun Iuran (2026 - 2036) -->
       <div class="flex items-center justify-between bg-slate-100/80 p-2 rounded-2xl border border-slate-200/60">
-        <button onclick="gantiTahunKartu(-1, '${namaWarga.replace(/'/g, "\\'")}')" class="w-8 h-8 flex items-center justify-center bg-white rounded-xl text-slate-700 hover:bg-slate-200 transition shadow-xs ${tahunDipilih <= 2026 ? 'opacity-30 pointer-events-none' : ''}">
+        <button onclick="gantiTahunKartu(-1, '${targetId}')" class="w-8 h-8 flex items-center justify-center bg-white rounded-xl text-slate-700 hover:bg-slate-200 transition shadow-xs ${tahunDipilih <= 2026 ? 'opacity-30 pointer-events-none' : ''}">
           <i class="ph-bold ph-caret-left"></i>
         </button>
         <div class="text-center">
           <span class="text-[9px] uppercase font-black text-slate-400 block tracking-wider">Tahun Anggaran</span>
           <span class="text-sm font-black text-slate-900">${tahunDipilih}</span>
         </div>
-        <button onclick="gantiTahunKartu(1, '${namaWarga.replace(/'/g, "\\'")}')" class="w-8 h-8 flex items-center justify-center bg-white rounded-xl text-slate-700 hover:bg-slate-200 transition shadow-xs ${tahunDipilih >= 2036 ? 'opacity-30 pointer-events-none' : ''}">
+        <button onclick="gantiTahunKartu(1, '${targetId}')" class="w-8 h-8 flex items-center justify-center bg-white rounded-xl text-slate-700 hover:bg-slate-200 transition shadow-xs ${tahunDipilih >= 2036 ? 'opacity-30 pointer-events-none' : ''}">
           <i class="ph-bold ph-caret-right"></i>
         </button>
       </div>
@@ -2260,7 +2417,7 @@ function openModalKartuIuran(namaWarga) {
                   ${isLunas ? 'Lunas' : 'Belum Lunas'}
                 </span>
                 ${canManageIuran() ? `
-                  <button onclick="toggleStatusIuranWarga('${namaWarga.replace(/'/g, "\\'")}', '${b}', ${isLunas ? 0 : 1})" class="px-2.5 py-1 text-[11px] font-bold rounded-xl transition ${isLunas ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' : 'bg-brand-600 text-white hover:bg-brand-700'}">
+                  <button onclick="toggleStatusIuranWarga('${targetId}', '${b}', ${isLunas ? 0 : 1})" class="px-2.5 py-1 text-[11px] font-bold rounded-xl transition ${isLunas ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' : 'bg-brand-600 text-white hover:bg-brand-700'}">
                     ${isLunas ? 'Batal' : 'Lunaskan'}
                   </button>
                 ` : ''}
@@ -2271,7 +2428,7 @@ function openModalKartuIuran(namaWarga) {
       </div>
 
       <div class="pt-2 flex gap-2">
-        <button onclick="cetakKwitansiIuran('${namaWarga.replace(/'/g, "\\'")}', ${tahunDipilih})" class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1">
+        <button onclick="cetakKwitansiIuran('${targetId}', ${tahunDipilih})" class="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1">
           <i class="ph-bold ph-printer"></i>
           <span>Kwitansi</span>
         </button>
@@ -2282,28 +2439,34 @@ function openModalKartuIuran(namaWarga) {
   openModal(html);
 }
 
-function gantiTahunKartu(delta, namaWarga) {
+function gantiTahunKartu(delta, identifier) {
   modalKartuTahun = Math.max(2026, Math.min(2036, (modalKartuTahun || CURRENT_YEAR) + delta));
-  openModalKartuIuran(namaWarga);
+  openModalKartuIuran(identifier);
 }
 
-function toggleStatusIuranWarga(nama, bulan, statusVal) {
+function toggleStatusIuranWarga(identifier, bulan, statusVal) {
   if (!canManageIuran()) {
     showToast('Hanya Bendahara RT, Sekretaris, dan Admin yang berhak mengubah status iuran!', 'error');
     return;
   }
+  const wargaObj = db.warga.find(w => w.id === identifier || w.nama.toLowerCase().trim() === String(identifier).toLowerCase().trim()) || { id: 'W99', nama: identifier, noRumah: '-' };
+  const nama = wargaObj.nama;
+  const targetId = wargaObj.id || identifier;
   const targetStatus = statusVal === 1 ? 'Lunas' : 'Belum Lunas';
-  const existing = db.iuran.find(i => i.nama.toLowerCase().trim() === nama.toLowerCase().trim() && i.bulan.toLowerCase().trim() === bulan.toLowerCase().trim());
+  const existing = db.iuran.find(i => {
+    const matchW = (wargaObj.id && i.wargaId && i.wargaId === wargaObj.id) || i.nama.toLowerCase().trim() === nama.toLowerCase().trim();
+    return matchW && i.bulan.toLowerCase().trim() === bulan.toLowerCase().trim();
+  });
   const tglSekarang = new Date().toISOString().split('T')[0];
   
   if (existing) {
     existing.status = targetStatus;
     existing.tglBayar = targetStatus === 'Lunas' ? tglSekarang : '-';
-    kirimDataKeSheets('TOGGLE_IURAN', { nama, bulan, status: targetStatus, tglBayar: existing.tglBayar });
+    kirimDataKeSheets('TOGGLE_IURAN', { id: existing.id, wargaId: wargaObj.id, nama, bulan, status: targetStatus, tglBayar: existing.tglBayar });
   } else if (targetStatus === 'Lunas') {
     const itemIuran = {
       id: 'I' + Date.now().toString().slice(-4),
-      wargaId: 'W99',
+      wargaId: wargaObj.id || 'W99',
       nama: nama,
       bulan: bulan,
       nominal: Number(appConfig.tarifIuran) || 75000,
@@ -2320,7 +2483,7 @@ function toggleStatusIuranWarga(nama, bulan, statusVal) {
       tanggal: tglSekarang,
       tipe: 'masuk',
       nominal: Number(appConfig.tarifIuran) || 75000,
-      keterangan: `Iuran Warga ${nama} (${bulan})`
+      keterangan: `Iuran Warga ${nama} (${wargaObj.noRumah}) - ${bulan}`
     };
     db.kas.push(itemKas);
     kirimDataKeSheets('ADD_KAS', itemKas);
@@ -2328,7 +2491,7 @@ function toggleStatusIuranWarga(nama, bulan, statusVal) {
   }
 
   showToast(`Status iuran ${nama} (${bulan}) diperbarui: ${targetStatus}!`);
-  openModalKartuIuran(nama);
+  openModalKartuIuran(targetId);
 }
 
 function lunaskanCepat(nama, bulan, nominal) {
@@ -2413,9 +2576,9 @@ function lunaskanSemuaTunggakan(nama, bulanList, nominalPerBulan) {
   renderApp();
 }
 
-function cetakKwitansiIuran(namaWarga, tahun) {
-  const w = db.warga.find(x => x.nama.toLowerCase().trim() === namaWarga.toLowerCase().trim()) || { nama: namaWarga, noRumah: '-' };
-  const lunasList = db.iuran.filter(i => i.nama.toLowerCase().trim() === namaWarga.toLowerCase().trim() && i.bulan.includes(String(tahun)) && i.status === 'Lunas');
+function cetakKwitansiIuran(identifier, tahun) {
+  const w = db.warga.find(x => x.id === identifier || x.nama.toLowerCase().trim() === String(identifier).toLowerCase().trim()) || { id: identifier, nama: identifier, noRumah: '-' };
+  const lunasList = db.iuran.filter(i => ((w.id && i.wargaId && i.wargaId === w.id) || i.nama.toLowerCase().trim() === w.nama.toLowerCase().trim()) && i.bulan.includes(String(tahun)) && i.status === 'Lunas');
   const totalBayar = lunasList.reduce((acc, curr) => acc + (Number(curr.nominal) || 75000), 0);
 
   const printWindow = window.open('', '_blank');
@@ -2531,304 +2694,1918 @@ function eksekusiResetIuran() {
 }
 
 // ==========================================
-// 4. HALAMAN WARGA & e-SENSUS
+// 3B. MENU WARGA: SELF-HOSTED PAYMENT GATEWAY (QRIS & REKENING RT)
 // ==========================================
 
-// Helper Normalisasi & Validasi Nomor Rumah RT 04
-function parseNoRumah(noRumahStr) {
-  if (!noRumahStr) return { blok: '', no: 0, raw: '' };
-  let str = String(noRumahStr).trim();
-  str = str.replace(/\bCiskul 1\b/gi, 'Ciskul I');
-  let blok = '';
-  let no = 0;
-  if (str.startsWith('Gemani')) {
-    blok = 'Gemani';
-    const numPart = str.replace(/^Gemani\s*(No\.?)?/i, '').trim();
-    no = parseInt(numPart.replace(/\D/g, ''), 10) || 0;
+function salinKeClipboard(text, customMsg) {
+  if (!text) return;
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast(customMsg || `Berhasil disalin: ${text}`, 'success');
+    }).catch(() => {
+      fallbackSalinText(text, customMsg);
+    });
   } else {
-    const match = str.match(/^(Ciskul\s+(?:I|\d+))\s*(?:No\.?)?\s*(\d+)/i);
-    if (match) {
-      blok = match[1];
-      if (blok.toLowerCase() === 'ciskul 1') blok = 'Ciskul I';
-      no = parseInt(match[2], 10) || 0;
-    } else {
-      const parts = str.split(/\s+/);
-      if (parts.length >= 2) {
-        blok = parts.slice(0, parts.length - 1).join(' ').replace(/No\.?$/i, '').trim();
-        no = parseInt(parts[parts.length - 1].replace(/\D/g, ''), 10) || 0;
-      }
-    }
+    fallbackSalinText(text, customMsg);
   }
-  return { blok, no, raw: str };
 }
 
-function isSameHouseNumber(alamat1, alamat2) {
-  if (!alamat1 || !alamat2) return false;
-  const a1 = String(alamat1).toLowerCase().trim().replace(/\bCiskul 1\b/gi, 'ciskul i');
-  const a2 = String(alamat2).toLowerCase().trim().replace(/\bCiskul 1\b/gi, 'ciskul i');
-  if (a1 === a2) return true;
-  const p1 = parseNoRumah(alamat1);
-  const p2 = parseNoRumah(alamat2);
-  if (p1.blok && p2.blok && p1.no && p2.no) {
-    return p1.blok.toLowerCase() === p2.blok.toLowerCase() && p1.no === p2.no;
+function fallbackSalinText(text, customMsg) {
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.position = "fixed";
+  textArea.style.left = "-999999px";
+  textArea.style.top = "-999999px";
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    document.execCommand('copy');
+    showToast(customMsg || `Berhasil disalin: ${text}`, 'success');
+  } catch (err) {
+    showToast('Gagal menyalin teks otomatis', 'error');
   }
-  return false;
+  textArea.remove();
 }
 
-function findWargaByNoRumah(noRumah, excludeId = null) {
-  if (!noRumah) return null;
-  return db.warga.find(w => {
-    if (excludeId && w.id === excludeId) return false;
-    return isSameHouseNumber(w.noRumah, noRumah);
-  }) || null;
+function generateRandomKodeUnik() {
+  return Math.floor(100 + Math.random() * 899);
 }
 
-function getRegisteredWargaInBlok(blok, excludeId = null) {
-  const normBlok = (blok || '').replace(/\bCiskul 1\b/gi, 'Ciskul I').toLowerCase().trim();
-  return db.warga.filter(w => {
-    if (excludeId && w.id === excludeId) return false;
-    const p = parseNoRumah(w.noRumah);
-    return p.blok.toLowerCase() === normBlok;
-  }).sort((a, b) => {
-    const pA = parseNoRumah(a.noRumah).no;
-    const pB = parseNoRumah(b.noRumah).no;
-    return pA - pB;
-  });
-}
-
-function getSensusNoRumahOptionsHtml(blok, selectedNo = null, excludeId = null) {
-  let html = '';
-  for (let i = 1; i <= 70; i++) {
-    const numStr = `No. ${i}`;
-    const fullAlamat = `${blok} ${numStr}`;
-    const penghuni = findWargaByNoRumah(fullAlamat, excludeId);
-    let isSel = false;
-    if (selectedNo) {
-      isSel = isSameHouseNumber(`${blok} ${selectedNo}`, fullAlamat);
-    } else if (i === 1 && !penghuni) {
-      isSel = true;
-    }
-    
-    if (penghuni) {
-      html += `<option value="${numStr}" class="text-rose-600 font-bold bg-rose-50" style="color: #e11d48; font-weight: bold; background-color: #fff1f2;" ${isSel ? 'selected' : ''}>${numStr} 🔴 [SUDAH TERDAFTAR: ${penghuni.nama}]</option>`;
-    } else {
-      html += `<option value="${numStr}" class="text-slate-700" ${isSel ? 'selected' : ''}>${numStr} (Tersedia)</option>`;
-    }
-  }
-  return html;
-}
-
-function getSensusHighlightPanelHtml(blok, excludeId = null) {
-  const list = getRegisteredWargaInBlok(blok, excludeId);
-  const count = list.length;
-  const tersedia = 70 - count;
+function getUnpaidMonthsForWarga(wargaNama) {
+  if (!wargaNama) return [];
+  const namaLower = wargaNama.toLowerCase().trim();
+  const unpaid = [];
   
-  return `
-    <div class="space-y-2">
-      <div class="flex items-center justify-between flex-wrap gap-2">
-        <div class="flex items-center gap-1.5">
-          <i class="ph-bold ph-house-line text-amber-600 text-sm"></i>
-          <span class="text-xs font-black text-slate-800">Nomor Rumah Terdaftar di <span class="text-amber-700 underline font-black">${blok}</span>:</span>
+  // Periksa 12 bulan di tahun berjalan
+  for (let m = 0; m < 12; m++) {
+    const bulanStr = `${NAMA_BULAN_ID[m]} ${CURRENT_YEAR}`;
+    const isLunas = db.iuran.some(i => i.nama.toLowerCase().trim() === namaLower && i.bulan.toLowerCase().trim() === bulanStr.toLowerCase().trim() && i.status === 'Lunas');
+    if (!isLunas) {
+      unpaid.push(bulanStr);
+    }
+  }
+  return unpaid;
+}
+
+function getPendingMonthsForWarga(wargaNama) {
+  if (!wargaNama || !db.pembayaran) return [];
+  const namaLower = wargaNama.toLowerCase().trim();
+  const pending = [];
+  db.pembayaran
+    .filter(p => p.namaWarga.toLowerCase().trim() === namaLower && p.status === 'Menunggu Verifikasi')
+    .forEach(p => {
+      if (Array.isArray(p.bulanList)) {
+        p.bulanList.forEach(b => pending.push(b));
+      }
+    });
+  return pending;
+}
+
+function selectBayarWarga(wargaId) {
+  bayarSelectedWargaId = wargaId;
+  const warga = db.warga.find(w => w.id === wargaId);
+  if (!warga) return;
+
+  const unpaid = getUnpaidMonthsForWarga(warga.nama);
+  const pending = getPendingMonthsForWarga(warga.nama);
+  const availableUnpaid = unpaid.filter(b => !pending.includes(b));
+
+  const targetBulanIni = `${CURRENT_MONTH_NAME} ${CURRENT_YEAR}`;
+  if (availableUnpaid.includes(targetBulanIni)) {
+    bayarSelectedBulan = [targetBulanIni];
+  } else if (availableUnpaid.length > 0) {
+    bayarSelectedBulan = [availableUnpaid[0]];
+  } else {
+    bayarSelectedBulan = [];
+  }
+
+  if (bayarKodeUnik === 0) {
+    bayarKodeUnik = generateRandomKodeUnik();
+  }
+
+  renderApp();
+}
+
+function toggleBayarBulan(bulanStr) {
+  if (bayarSelectedBulan.includes(bulanStr)) {
+    bayarSelectedBulan = bayarSelectedBulan.filter(b => b !== bulanStr);
+  } else {
+    bayarSelectedBulan.push(bulanStr);
+  }
+
+  if (bayarKodeUnik === 0 && bayarSelectedBulan.length > 0) {
+    bayarKodeUnik = generateRandomKodeUnik();
+  }
+
+  renderApp();
+}
+
+function pilihSemuaTunggakanBayar(wargaId) {
+  const warga = db.warga.find(w => w.id === wargaId);
+  if (!warga) return;
+
+  const unpaid = getUnpaidMonthsForWarga(warga.nama);
+  const pending = getPendingMonthsForWarga(warga.nama);
+  
+  // Filter tunggakan s.d. bulan berjalan
+  const currentMonthIdx = CURRENT_MONTH_IDX;
+  const overdue = unpaid.filter(b => {
+    if (pending.includes(b)) return false;
+    const parts = b.split(' ');
+    const mName = parts[0];
+    const mIdx = NAMA_BULAN_ID.indexOf(mName);
+    return mIdx <= currentMonthIdx;
+  });
+
+  if (overdue.length > 0) {
+    bayarSelectedBulan = [...overdue];
+  } else {
+    bayarSelectedBulan = unpaid.filter(b => !pending.includes(b)).slice(0, 3);
+  }
+
+  if (bayarKodeUnik === 0) bayarKodeUnik = generateRandomKodeUnik();
+  renderApp();
+}
+
+function pilihPaketBulan(jumlahBulan, wargaId) {
+  const warga = db.warga.find(w => w.id === wargaId);
+  if (!warga) return;
+
+  const unpaid = getUnpaidMonthsForWarga(warga.nama);
+  const pending = getPendingMonthsForWarga(warga.nama);
+  const available = unpaid.filter(b => !pending.includes(b));
+
+  bayarSelectedBulan = available.slice(0, jumlahBulan);
+  if (bayarKodeUnik === 0) bayarKodeUnik = generateRandomKodeUnik();
+  renderApp();
+}
+
+function gantiMetodeBayar(metode) {
+  bayarMetode = metode;
+  renderApp();
+}
+
+function handleBayarBuktiUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    showToast('Harap pilih file berupa foto atau gambar (JPG/PNG)!', 'error');
+    return;
+  }
+
+  // Gunakan FileReader dan Canvas untuk kompresi agar ramah penyimpanan
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const maxDim = 900;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height && width > maxDim) {
+        height = Math.round((height * maxDim) / width);
+        width = maxDim;
+      } else if (height > maxDim) {
+        width = Math.round((width * maxDim) / height);
+        height = maxDim;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      bayarUploadedBuktiBase64 = canvas.toDataURL('image/jpeg', 0.82);
+      showToast('Bukti transfer berhasil dilampirkan!');
+      renderApp();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function hapusBayarBuktiUpload() {
+  bayarUploadedBuktiBase64 = '';
+  showToast('Lampiran bukti transfer dihapus.');
+  renderApp();
+}
+
+function submitKonfirmasiPembayaran(event) {
+  event.preventDefault();
+
+  if (!bayarSelectedWargaId) {
+    showToast('Harap pilih nama Kepala Keluarga atau Nomor Rumah terlebih dahulu!', 'error');
+    return;
+  }
+
+  const warga = db.warga.find(w => w.id === bayarSelectedWargaId);
+  if (!warga) {
+    showToast('Data warga tidak ditemukan!', 'error');
+    return;
+  }
+
+  if (bayarSelectedBulan.length === 0) {
+    showToast('Pilih minimal 1 bulan iuran yang ingin dibayarkan!', 'error');
+    return;
+  }
+
+  const namaPengirimInput = document.getElementById('bayarNamaPengirim');
+  const tglBayarInput = document.getElementById('bayarTglBayar');
+  const catatanInput = document.getElementById('bayarCatatan');
+
+  const namaPengirim = namaPengirimInput ? namaPengirimInput.value.trim() : warga.nama;
+  const tglBayar = tglBayarInput ? tglBayarInput.value.trim() : new Date().toISOString().replace('T', ' ').slice(0, 16);
+  const catatan = catatanInput ? catatanInput.value.trim() : '';
+
+  const tarif = Number(appConfig.tarifIuran) || 75000;
+  const nominalIuran = bayarSelectedBulan.length * tarif;
+  const kodeUnik = appConfig.pgGunakanKodeUnik !== false ? (bayarKodeUnik || generateRandomKodeUnik()) : 0;
+  const totalBayar = nominalIuran + kodeUnik;
+
+  const now = new Date();
+  const dateCode = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const randomSuffix = String(Math.floor(1000 + Math.random() * 9000));
+  const newInvoiceId = `INV-${dateCode}-${randomSuffix}`;
+
+  const transaksiBaru = {
+    id: newInvoiceId,
+    wargaId: warga.id,
+    namaWarga: warga.nama,
+    noRumah: warga.noRumah,
+    telp: warga.telp || '',
+    bulanList: [...bayarSelectedBulan],
+    nominalIuran: nominalIuran,
+    kodeUnik: kodeUnik,
+    totalBayar: totalBayar,
+    metode: bayarMetode,
+    status: 'Menunggu Verifikasi',
+    tglTransaksi: tglBayar || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+    tglVerifikasi: '-',
+    verifikator: '-',
+    namaPengirim: namaPengirim || warga.nama,
+    buktiBayar: bayarUploadedBuktiBase64 || '',
+    catatan: catatan
+  };
+
+  if (!Array.isArray(db.pembayaran)) {
+    db.pembayaran = [];
+  }
+  db.pembayaran.unshift(transaksiBaru);
+
+  // Catat di event logs
+  logEvent('GATEWAY', `Pengajuan bayar iuran mandiri: ${warga.nama} (${bayarSelectedBulan.join(', ')}) Total Rp ${totalBayar.toLocaleString('id-ID')} [${newInvoiceId}]`, 'info', warga.nama);
+
+  // Sinkronkan ke spreadsheet backend
+  kirimDataKeSheets('SUBMIT_PEMBAYARAN', transaksiBaru);
+
+  triggerConfetti();
+  showToast('Konfirmasi pembayaran berhasil dikirim! Menunggu verifikasi bendahara.', 'success');
+
+  // Reset state formulir
+  bayarSelectedBulan = [];
+  bayarUploadedBuktiBase64 = '';
+  bayarKodeUnik = 0;
+
+  // Buka Modal Invoice Resmi
+  openModalInvoicePembayaran(newInvoiceId);
+}
+
+function bukaWhatsAppKonfirmasi(invoiceId) {
+  const p = (db.pembayaran || []).find(item => item.id === invoiceId);
+  if (!p) {
+    showToast('Data transaksi tidak ditemukan!', 'error');
+    return;
+  }
+
+  const noWa = appConfig.pgWaKonfirmasi || appConfig.kontakBendahara || appConfig.kontakRt || '6281234567891';
+  const cleanPhone = String(noWa).replace(/[^0-9]/g, '');
+
+  const metodeStr = p.metode === 'qris' 
+    ? 'QRIS RT 04 (m-Banking / e-Wallet)' 
+    : `Transfer Bank RT (${appConfig.pgNamaBank || 'Bank Mandiri'})`;
+
+  const bulanStr = Array.isArray(p.bulanList) ? p.bulanList.join(', ') : p.bulanList;
+
+  const pesan = `*KONFIRMASI PEMBAYARAN IURAN WARGA RT 04* 🏛️\n` +
+    `---------------------------------------------------\n` +
+    `No. Invoice : *${p.id}*\n` +
+    `Nama KK : *${p.namaWarga}*\n` +
+    `Alamat : ${p.noRumah}\n` +
+    `Iuran Bulan : *${bulanStr}*\n` +
+    `Metode Bayar : ${metodeStr}\n` +
+    `Nominal Iuran : Rp ${Number(p.nominalIuran).toLocaleString('id-ID')}\n` +
+    `Kode Unik : Rp ${p.kodeUnik}\n` +
+    `*TOTAL TRANSFER : Rp ${Number(p.totalBayar).toLocaleString('id-ID')}*\n` +
+    `Nama Pengirim : ${p.namaPengirim || p.namaWarga}\n` +
+    `Waktu : ${p.tglTransaksi}\n` +
+    `Catatan : ${p.catatan || '-'}\n` +
+    `---------------------------------------------------\n` +
+    `Mohon Bendahara RT 04 memverifikasi pembayaran ini pada aplikasi SatuWarga 04. Terima kasih! 🙏`;
+
+  const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(pesan)}`;
+  window.open(waUrl, '_blank');
+}
+
+function verifikasiPembayaranMasuk(invoiceId) {
+  if (!canManageIuran()) {
+    showToast('Hanya Bendahara atau Pengurus yang berwenang memverifikasi pembayaran!', 'error');
+    return;
+  }
+
+  const p = (db.pembayaran || []).find(item => item.id === invoiceId);
+  if (!p) return;
+
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const verifikatorName = currentUser ? (currentUser.namaWarga || currentUser.username) : 'Bendahara RT 04';
+
+  p.status = 'Lunas';
+  p.tglVerifikasi = todayStr;
+  p.verifikator = verifikatorName;
+
+  // 1. Catat lunas untuk setiap bulan yang dibayarkan di db.iuran
+  const tarif = Number(appConfig.tarifIuran) || 75000;
+  if (Array.isArray(p.bulanList)) {
+    p.bulanList.forEach(bulanStr => {
+      const existing = db.iuran.find(i => 
+        i.nama.toLowerCase().trim() === p.namaWarga.toLowerCase().trim() && 
+        i.bulan.toLowerCase().trim() === bulanStr.toLowerCase().trim()
+      );
+      if (existing) {
+        existing.status = 'Lunas';
+        existing.tglBayar = todayStr;
+      } else {
+        db.iuran.push({
+          id: 'I' + Date.now().toString().slice(-4) + Math.floor(Math.random() * 10),
+          wargaId: p.wargaId || 'W99',
+          nama: p.namaWarga,
+          bulan: bulanStr,
+          nominal: tarif,
+          status: 'Lunas',
+          tglBayar: todayStr
+        });
+      }
+    });
+  }
+
+  // 2. Otomatis catat transaksi kas masuk di db.kas
+  const kasBaru = {
+    id: 'KAS-' + Date.now().toString().slice(-4),
+    tanggal: todayStr,
+    tipe: 'masuk',
+    nominal: Number(p.totalBayar) || (p.bulanList.length * tarif),
+    keterangan: `Iuran (${p.bulanList.join(', ')}) a.n ${p.namaWarga} [Payment Gateway ${p.id}]`
+  };
+  db.kas.unshift(kasBaru);
+
+  // 3. Catat di audit trail
+  logEvent('GATEWAY', `Verifikasi pembayaran iuran Lunas: ${p.namaWarga} Rp ${Number(p.totalBayar).toLocaleString('id-ID')} (${p.id})`, 'success', verifikatorName);
+
+  // 4. Sinkronkan ke backend spreadsheet
+  kirimDataKeSheets('VERIFIKASI_PEMBAYARAN', p);
+  kirimDataKeSheets('ADD_KAS', kasBaru);
+
+  triggerConfetti();
+  showToast(`Pembayaran ${p.id} berhasil diverifikasi Lunas! Kas dan Kartu Iuran otomatis terupdate.`, 'success');
+  renderApp();
+}
+
+function openModalTolakPembayaran(invoiceId) {
+  if (!canManageIuran()) {
+    showToast('Hanya Bendahara atau Pengurus yang berwenang!', 'error');
+    return;
+  }
+
+  const p = (db.pembayaran || []).find(item => item.id === invoiceId);
+  if (!p) return;
+
+  const html = `
+    <div class="space-y-4 text-left p-1">
+      <div class="flex items-center space-x-3 pb-3 border-b border-slate-200">
+        <div class="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-xl flex-shrink-0">
+          <i class="ph-bold ph-x-circle"></i>
         </div>
-        <div class="flex items-center gap-1.5 text-[10.5px] font-bold">
-          <span class="px-2 py-0.5 rounded-full ${count > 0 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-slate-100 text-slate-500'}">
-            🔴 ${count} Terdaftar
-          </span>
-          <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-            🟢 ${tersedia} Tersedia
-          </span>
-          <button type="button" onclick="openModalRekapRumahSemuaBlok()" class="ml-1 px-2 py-0.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition flex items-center gap-1 text-[10px] active:scale-95">
-            <i class="ph-bold ph-squares-four text-xs"></i>
-            <span>Semua Blok</span>
-          </button>
+        <div>
+          <h3 class="text-sm font-black text-slate-900 font-display">Tolak Konfirmasi Pembayaran</h3>
+          <p class="text-[11px] text-slate-500">${p.id} • ${p.namaWarga}</p>
         </div>
       </div>
 
-      ${count === 0 ? `
-        <div class="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 text-[11px] flex items-center gap-2">
-          <i class="ph-bold ph-check-circle text-emerald-500 text-base"></i>
-          <span>Belum ada nomor rumah yang terdaftar di blok <b>${blok}</b>. Seluruh nomor <b>No. 1 s/d No. 70</b> masih tersedia.</span>
-        </div>
-      ` : `
-        <div class="p-2.5 rounded-xl bg-white border border-slate-200 space-y-1.5">
-          <div class="flex items-center justify-between">
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nomor Rumah yang Sudah Digunakan (Tertolak Jika Diinput Ulang):</p>
-            <span class="text-[9.5px] text-slate-400 italic">Klik nomor untuk memilih</span>
-          </div>
-          <div class="flex flex-wrap gap-1.5">
-            ${list.map(w => {
-              const p = parseNoRumah(w.noRumah);
-              return `
-                <button type="button" onclick="pilihNomorRumahSensus('${blok}', 'No. ${p.no}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100 transition shadow-2xs active:scale-95" title="Klik untuk cek status: ${w.noRumah} telah dihuni ${w.nama}">
-                  <span class="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0 animate-pulse"></span>
-                  <b>No. ${p.no}</b>
-                  <span class="text-[10px] text-rose-600 font-semibold truncate max-w-[120px]">(${w.nama})</span>
-                </button>
-              `;
-            }).join('')}
-          </div>
-        </div>
-      `}
+      <div class="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-800">
+        <p class="font-bold">Perhatian:</p>
+        <p class="text-[11px] mt-0.5">Penolakan akan merubah status transaksi menjadi Ditolak. Mohon berikan alasan yang jelas agar warga dapat melakukan konfirmasi ulang.</p>
+      </div>
+
+      <div>
+        <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Alasan Penolakan</label>
+        <textarea id="alasanTolakInput" rows="3" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500" placeholder="Contoh: Nominal mutasi kas tidak ditemukan di rekening, atau bukti transfer tidak terbaca..."></textarea>
+      </div>
+
+      <div class="flex space-x-2 pt-2">
+        <button onclick="closeModal()" class="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition">Batal</button>
+        <button onclick="eksekusiTolakPembayaran('${p.id}')" class="w-1/2 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shadow">Konfirmasi Tolak</button>
+      </div>
     </div>
   `;
+  openModal(html);
 }
 
-function getSensusStatusBannerHtml(blok, noStr, excludeId = null) {
-  if (!blok || !noStr) return '';
-  const fullAlamat = `${blok} ${noStr}`;
-  const penghuni = findWargaByNoRumah(fullAlamat, excludeId);
+function eksekusiTolakPembayaran(invoiceId) {
+  const p = (db.pembayaran || []).find(item => item.id === invoiceId);
+  if (!p) return;
 
-  if (penghuni) {
-    return `
-      <div class="p-3.5 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-900 text-xs flex items-start gap-3 shadow-xs animate-pulse-once">
-        <div class="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 text-lg">
-          <i class="ph-bold ph-prohibit"></i>
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="font-black text-rose-800 uppercase tracking-wide text-[10px] bg-rose-200/90 px-2 py-0.5 rounded-md">
-              ❌ Nomor Rumah Tertolak / Sudah Terdaftar
-            </span>
-          </div>
-          <p class="text-xs font-black text-rose-950 mt-1">
-            Alamat <b>${fullAlamat}</b> telah digunakan dan terdaftar atas nama: <span class="text-rose-700 underline font-black">${penghuni.nama}</span> (${penghuni.status || 'Warga'}).
-          </p>
-          <p class="text-[11px] text-rose-700 mt-1">
-            ⚠️ Penginputan sensus untuk nomor rumah ini <span class="font-black underline">pasti ditolak</span> oleh sistem RT 04 karena alamat telah terisi. Silakan pilih nomor rumah lain yang bertanda <i>(Tersedia)</i>.
-          </p>
-        </div>
-      </div>
-    `;
-  } else {
-    return `
-      <div class="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-3">
-        <div class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 text-base">
-          <i class="ph-bold ph-check-circle"></i>
-        </div>
-        <div class="flex-1 min-w-0">
-          <p class="text-xs font-bold text-emerald-950">
-            Nomor Rumah <b>${fullAlamat}</b> <span class="text-emerald-700 font-extrabold uppercase">Tersedia</span>
-          </p>
-          <p class="text-[11px] text-emerald-700">Nomor rumah ini belum terdaftar di sistem RT 04 dan siap untuk diinputkan.</p>
-        </div>
-      </div>
-    `;
-  }
+  const alasanInput = document.getElementById('alasanTolakInput');
+  const alasan = alasanInput ? (alasanInput.value.trim() || 'Pembayaran belum dapat diverifikasi oleh pengurus') : 'Ditolak';
+
+  p.status = 'Ditolak';
+  p.catatan = `Ditolak: ${alasan}`;
+
+  logEvent('GATEWAY', `Tolak pembayaran: ${p.namaWarga} (${p.id}) Alasan: ${alasan}`, 'warning');
+  kirimDataKeSheets('TOLAK_PEMBAYARAN', p);
+
+  closeModal();
+  showToast('Transaksi pembayaran telah ditandai ditolak.', 'info');
+  renderApp();
 }
 
-function handleSensusBlokChange() {
-  const blokEl = document.getElementById('sensusBlok');
-  const noEl = document.getElementById('sensusNoRumah');
-  if (!blokEl || !noEl) return;
-  const blok = blokEl.value;
-  
-  noEl.innerHTML = getSensusNoRumahOptionsHtml(blok, noEl.value);
-  handleSensusNoRumahChange();
-}
-
-function handleSensusNoRumahChange() {
-  const blokEl = document.getElementById('sensusBlok');
-  const noEl = document.getElementById('sensusNoRumah');
-  const bannerEl = document.getElementById('sensusStatusBanner');
-  const highlightEl = document.getElementById('sensusHighlightContainer');
-  if (!blokEl || !noEl) return;
-  
-  const blok = blokEl.value;
-  const no = noEl.value;
-  const fullAlamat = `${blok} ${no}`;
-  const penghuni = findWargaByNoRumah(fullAlamat);
-
-  if (penghuni) {
-    noEl.classList.add('border-rose-500', 'ring-2', 'ring-rose-300', 'bg-rose-50/50');
-    noEl.classList.remove('border-slate-200', 'border-emerald-500', 'bg-slate-50', 'bg-emerald-50/20');
-  } else {
-    noEl.classList.add('border-emerald-500', 'bg-emerald-50/20');
-    noEl.classList.remove('border-rose-500', 'ring-2', 'ring-rose-300', 'bg-rose-50/50');
+function openModalLihatBukti(invoiceId) {
+  const p = (db.pembayaran || []).find(item => item.id === invoiceId);
+  if (!p || !p.buktiBayar) {
+    showToast('Tidak ada lampiran bukti transfer pada transaksi ini.', 'info');
+    return;
   }
 
-  if (bannerEl) {
-    bannerEl.innerHTML = getSensusStatusBannerHtml(blok, no);
-  }
-  if (highlightEl) {
-    highlightEl.innerHTML = getSensusHighlightPanelHtml(blok);
-  }
-}
-
-function pilihNomorRumahSensus(blok, no) {
-  const blokEl = document.getElementById('sensusBlok');
-  const noEl = document.getElementById('sensusNoRumah');
-  if (blokEl && blokEl.value !== blok) {
-    blokEl.value = blok;
-    noEl.innerHTML = getSensusNoRumahOptionsHtml(blok, no);
-  }
-  if (noEl) {
-    noEl.value = no;
-  }
-  handleSensusNoRumahChange();
-  const bannerEl = document.getElementById('sensusStatusBanner');
-  if (bannerEl) bannerEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-function openModalRekapRumahSemuaBlok() {
-  const daftarBlok = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
-  
   const html = `
-    <div class="space-y-4 text-left max-h-[85vh] flex flex-col">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-200">
-        <div>
-          <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Direktori Pemukiman</span>
-          <h3 class="text-sm font-black text-slate-900 mt-1">Rekap Nomor Rumah Terdaftar RT 04</h3>
-          <p class="text-[11px] text-slate-500 mt-0.5">Daftar nomor rumah yang telah digunakan / terdaftar di seluruh blok.</p>
+    <div class="space-y-3 text-center p-1">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div class="text-left">
+          <h3 class="text-xs font-black text-slate-900 uppercase tracking-wide">Lampiran Bukti Transfer</h3>
+          <p class="text-[11px] text-slate-500">${p.id} • ${p.namaWarga}</p>
         </div>
-        <button onclick="closeModal()" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
-          <i class="ph-bold ph-x text-lg"></i>
+        <button onclick="closeModal()" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl">
+          <i class="ph-bold ph-x text-base"></i>
         </button>
       </div>
 
-      <div class="overflow-y-auto space-y-3 pr-1">
-        ${daftarBlok.map(b => {
-          const terdaftar = getRegisteredWargaInBlok(b);
-          const count = terdaftar.length;
-          return `
-            <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                  <i class="ph-bold ph-buildings text-amber-600"></i>
-                  Blok ${b}
-                </span>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${count > 0 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}">
-                  ${count} Terdaftar / ${70 - count} Tersedia
-                </span>
-              </div>
-              ${count === 0 ? `
-                <p class="text-[11px] text-slate-400 italic">Belum ada nomor rumah yang terdaftar di blok ini (Semua No. 1-70 tersedia).</p>
-              ` : `
-                <div class="flex flex-wrap gap-1.5 pt-1">
-                  ${terdaftar.map(w => {
-                    const p = parseNoRumah(w.noRumah);
-                    return `
-                      <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10.5px] font-bold bg-white text-slate-800 border border-slate-200 shadow-2xs">
-                        <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                        <b class="text-rose-700">No. ${p.no}</b>
-                        <span class="text-[9.5px] text-slate-500 font-semibold truncate max-w-[130px]">(${w.nama})</span>
-                      </span>
-                    `;
-                  }).join('')}
-                </div>
-              `}
-            </div>
-          `;
-        }).join('')}
+      <div class="rounded-2xl overflow-hidden bg-slate-950/5 border border-slate-200 max-h-[65vh] flex items-center justify-center p-1">
+        <img src="${p.buktiBayar}" alt="Bukti Transfer" class="max-w-full max-h-[60vh] object-contain rounded-xl shadow-sm">
       </div>
 
-      <div class="pt-2 border-t border-slate-200 text-right">
-        <button onclick="closeModal()" class="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold transition hover:bg-slate-900">
-          Tutup Rekap
+      <div class="flex items-center justify-between pt-1 text-xs">
+        <span class="text-slate-500 text-[11px]">Total: <b>Rp ${(Number(p.totalBayar) || 0).toLocaleString('id-ID')}</b></span>
+        <button onclick="closeModal()" class="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl">Tutup</button>
+      </div>
+    </div>
+  `;
+  openModal(html);
+}
+
+function openModalInvoicePembayaran(invoiceId) {
+  const p = (db.pembayaran || []).find(item => item.id === invoiceId);
+  if (!p) {
+    showToast('Data invoice tidak ditemukan!', 'error');
+    return;
+  }
+
+  const isLunas = p.status === 'Lunas';
+  const isPending = p.status === 'Menunggu Verifikasi';
+  const isDitolak = p.status === 'Ditolak';
+
+  const statusBadge = isLunas 
+    ? `<span class="px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1"><i class="ph-bold ph-check-circle"></i> Terverifikasi Lunas</span>`
+    : (isPending 
+        ? `<span class="px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse"><i class="ph-bold ph-clock"></i> Menunggu Verifikasi Bendahara</span>`
+        : `<span class="px-3 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1"><i class="ph-bold ph-x-circle"></i> Ditolak</span>`);
+
+  const bulanStr = Array.isArray(p.bulanList) ? p.bulanList.join(', ') : p.bulanList;
+
+  const html = `
+    <div class="space-y-4 text-left p-1">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div>
+          <span class="text-[9.5px] font-black uppercase text-brand-700 tracking-wider">Nota Pembayaran Mandiri</span>
+          <h3 class="text-base font-black text-slate-900 font-display">${p.id}</h3>
+        </div>
+        <div class="flex-shrink-0">${statusBadge}</div>
+      </div>
+
+      <!-- Detail Box -->
+      <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200/90 space-y-2.5 text-xs">
+        <div class="flex justify-between border-b border-slate-200/60 pb-1.5">
+          <span class="text-slate-500 font-semibold">Nama Kepala Keluarga:</span>
+          <span class="font-black text-slate-900">${p.namaWarga}</span>
+        </div>
+        <div class="flex justify-between border-b border-slate-200/60 pb-1.5">
+          <span class="text-slate-500 font-semibold">Nomor Rumah / Alamat:</span>
+          <span class="font-bold text-slate-800">${p.noRumah}</span>
+        </div>
+        <div class="flex justify-between border-b border-slate-200/60 pb-1.5">
+          <span class="text-slate-500 font-semibold">Bulan Iuran Dibayar:</span>
+          <span class="font-black text-emerald-800 text-right">${bulanStr}</span>
+        </div>
+        <div class="flex justify-between border-b border-slate-200/60 pb-1.5">
+          <span class="text-slate-500 font-semibold">Metode Pembayaran:</span>
+          <span class="font-bold text-slate-800 uppercase">${p.metode === 'qris' ? 'QRIS RT 04' : `Transfer ${appConfig.pgNamaBank || 'Bank'}`}</span>
+        </div>
+        <div class="flex justify-between border-b border-slate-200/60 pb-1.5">
+          <span class="text-slate-500 font-semibold">Waktu Pengajuan:</span>
+          <span class="font-medium text-slate-600">${p.tglTransaksi}</span>
+        </div>
+        <div class="flex justify-between border-b border-slate-200/60 pb-1.5">
+          <span class="text-slate-500 font-semibold">Nama Pengirim:</span>
+          <span class="font-bold text-slate-800">${p.namaPengirim || p.namaWarga}</span>
+        </div>
+
+        <div class="pt-1 space-y-1">
+          <div class="flex justify-between text-slate-600">
+            <span>Subtotal Iuran (${(Array.isArray(p.bulanList) ? p.bulanList.length : 1)} Bulan):</span>
+            <span class="font-semibold">Rp ${(Number(p.nominalIuran) || 0).toLocaleString('id-ID')}</span>
+          </div>
+          <div class="flex justify-between text-slate-600">
+            <span>Kode Unik Verifikasi:</span>
+            <span class="font-mono font-bold text-emerald-700">+ Rp ${(Number(p.kodeUnik) || 0).toLocaleString('id-ID')}</span>
+          </div>
+          <div class="flex justify-between text-sm font-black text-slate-900 pt-1.5 border-t border-slate-300">
+            <span>TOTAL DITRANSFER:</span>
+            <span class="text-brand-700 font-display">Rp ${(Number(p.totalBayar) || 0).toLocaleString('id-ID')}</span>
+          </div>
+        </div>
+      </div>
+
+      ${isPending ? `
+        <div class="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-800 leading-relaxed">
+          <div class="flex items-center gap-1.5 font-bold">
+            <i class="ph-bold ph-info"></i>
+            <span>Instruksi Verifikasi Cepat:</span>
+          </div>
+          <p class="text-[11px] mt-1">
+            Silakan kirimkan notifikasi atau bukti transfer ke WhatsApp Bendahara RT 04 agar proses verifikasi dan pelunasan dapat langsung disetujui.
+          </p>
+        </div>
+      ` : ''}
+
+      ${isDitolak ? `
+        <div class="p-3 bg-rose-50 rounded-2xl border border-rose-200 text-xs text-rose-800 leading-relaxed">
+          <div class="flex items-center gap-1.5 font-bold">
+            <i class="ph-bold ph-warning-circle"></i>
+            <span>Catatan Penolakan:</span>
+          </div>
+          <p class="text-[11px] mt-1">${p.catatan || 'Pembayaran belum dapat diverifikasi.'}</p>
+        </div>
+      ` : ''}
+
+      <!-- Tombol Aksi Modal -->
+      <div class="flex flex-wrap gap-2 pt-1">
+        <button onclick="bukaWhatsAppKonfirmasi('${p.id}')" class="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 shadow-md active:scale-95">
+          <i class="ph-bold ph-whatsapp-logo text-base"></i>
+          <span>Kirim WhatsApp Bendahara</span>
+        </button>
+        ${isLunas ? `
+          <button onclick="openModalCetakKwitansiPayment('${p.id}')" class="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95">
+            <i class="ph-bold ph-printer text-base"></i>
+            <span>Cetak Kwitansi</span>
+          </button>
+        ` : ''}
+        ${p.buktiBayar ? `
+          <button onclick="openModalLihatBukti('${p.id}')" class="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95">
+            <i class="ph-bold ph-image"></i>
+            <span>Bukti</span>
+          </button>
+        ` : ''}
+        <button onclick="closeModal()" class="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition">
+          Tutup
         </button>
       </div>
     </div>
   `;
   openModal(html);
+}
+
+function openModalCetakKwitansiPayment(invoiceId) {
+  const p = (db.pembayaran || []).find(item => item.id === invoiceId);
+  if (!p) return;
+
+  const w = db.warga.find(x => x.id === p.wargaId) || { nama: p.namaWarga, noRumah: p.noRumah };
+  const bulanStr = Array.isArray(p.bulanList) ? p.bulanList.join(', ') : p.bulanList;
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+      <meta charset="UTF-8">
+      <title>Kwitansi Pembayaran Iuran RT 04 - ${p.id}</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 25px; color: #1e293b; max-width: 680px; margin: auto; }
+        .receipt-card { border: 2px solid #064e3b; border-radius: 16px; padding: 24px; position: relative; background: #ffffff; }
+        .header { text-align: center; border-bottom: 2px solid #059669; padding-bottom: 12px; margin-bottom: 16px; }
+        .header h2 { margin: 0; font-size: 17px; font-weight: 900; color: #064e3b; text-transform: uppercase; letter-spacing: 0.5px; }
+        .header h3 { margin: 3px 0; font-size: 13px; font-weight: 700; color: #334155; }
+        .header p { margin: 2px 0 0 0; font-size: 10.5px; color: #64748b; }
+        .kw-badge { display: inline-block; background: #ecfdf5; border: 1.5px solid #10b981; color: #065f46; font-size: 11px; font-weight: 800; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; margin-bottom: 12px; }
+        .grid-info { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+        .grid-info td { padding: 6px 4px; vertical-align: top; }
+        .grid-info td.lbl { width: 150px; font-weight: 700; color: #475569; }
+        .grid-info td.sep { width: 12px; font-weight: bold; }
+        .grid-info td.val { font-weight: 600; color: #0f172a; }
+        .total-box { margin-top: 15px; background: #f8fafc; border: 1.5px dashed #059669; border-radius: 12px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
+        .total-box .total-label { font-size: 12px; font-weight: 800; color: #065f46; text-transform: uppercase; }
+        .total-box .total-amount { font-size: 18px; font-weight: 900; color: #047857; }
+        .ttd-section { margin-top: 30px; display: flex; justify-content: space-between; font-size: 11.5px; text-align: center; }
+        .ttd-box { width: 200px; }
+        .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-25deg); font-size: 65px; font-weight: 900; color: rgba(16, 185, 129, 0.08); pointer-events: none; border: 4px dashed rgba(16, 185, 129, 0.12); padding: 10px 40px; border-radius: 16px; }
+        @media print { body { padding: 0; } .receipt-card { border: 1.5px solid #333; } }
+      </style>
+    </head>
+    <body>
+      <div class="receipt-card">
+        <div class="watermark">LUNAS</div>
+        <div class="header">
+          <h2>${appConfig.kopBaris1 || 'RUKUN TETANGGA 04 / RUKUN WARGA 14'}</h2>
+          <h3>${appConfig.kopBaris2 || 'KELURAHAN CISARANTEN KULON - KOTA BANDUNG'}</h3>
+          <p>${appConfig.kopAlamat || 'Sekretariat: Jl. Ciskul Raya No. 9, Arcamanik, Bandung'}</p>
+        </div>
+
+        <div style="text-align: center;">
+          <span class="kw-badge">BUKTI RESMI PELUNASAN IURAN RT (KWITANSI DIGITAL)</span>
+        </div>
+
+        <table class="grid-info">
+          <tr>
+            <td class="lbl">Nomor Kwitansi / Inv</td>
+            <td class="sep">:</td>
+            <td class="val"><b>${p.id}</b></td>
+          </tr>
+          <tr>
+            <td class="lbl">Telah Terima Dari</td>
+            <td class="sep">:</td>
+            <td class="val"><b>${p.namaWarga}</b></td>
+          </tr>
+          <tr>
+            <td class="lbl">Alamat / No. Rumah</td>
+            <td class="sep">:</td>
+            <td class="val">${p.noRumah}</td>
+          </tr>
+          <tr>
+            <td class="lbl">Untuk Pembayaran</td>
+            <td class="sep">:</td>
+            <td class="val"><b>Iuran Warga Periode ${bulanStr}</b></td>
+          </tr>
+          <tr>
+            <td class="lbl">Metode Pembayaran</td>
+            <td class="sep">:</td>
+            <td class="val">${p.metode === 'qris' ? 'QRIS RT 04 (m-Banking / e-Wallet)' : `Transfer Bank Kas RT (${appConfig.pgNamaBank || 'Bank Mandiri'})`}</td>
+          </tr>
+          <tr>
+            <td class="lbl">Waktu Pembayaran</td>
+            <td class="sep">:</td>
+            <td class="val">${p.tglTransaksi}</td>
+          </tr>
+          <tr>
+            <td class="lbl">Status Verifikasi</td>
+            <td class="sep">:</td>
+            <td class="val" style="color: #047857; font-weight: bold;">LUNAS (Terverifikasi Sistem)</td>
+          </tr>
+        </table>
+
+        <div class="total-box">
+          <div class="total-label">Jumlah Yang Dibayar (Termasuk Kode Unik):</div>
+          <div class="total-amount">Rp ${(Number(p.totalBayar) || 0).toLocaleString('id-ID')}</div>
+        </div>
+
+        <div class="ttd-section">
+          <div class="ttd-box">
+            <p>Warga Pembayar,</p>
+            <br><br><br>
+            <p><b>${p.namaPengirim || p.namaWarga}</b></p>
+          </div>
+          <div class="ttd-box">
+            <p>Bandung, ${p.tglVerifikasi || new Date().toISOString().split('T')[0]}</p>
+            <p>Bendahara RT 04 / RW 14,</p>
+            <br><br><br>
+            <p><b>${appConfig.namaBendahara || 'H. Ahmad Sobari'}</b></p>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => { printWindow.print(); }, 350);
+}
+
+function initQrisCode() {
+  const container = document.getElementById('qrisPaymentCanvas');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const warga = db.warga.find(w => w.id === bayarSelectedWargaId) || db.warga[0];
+  const tarif = Number(appConfig.tarifIuran) || 75000;
+  const countBulan = bayarSelectedBulan.length > 0 ? bayarSelectedBulan.length : 1;
+  const nominal = (countBulan * tarif) + (appConfig.pgGunakanKodeUnik !== false ? (bayarKodeUnik || 124) : 0);
+  const merchant = appConfig.pgQrisMerchant || 'RT 04 RW 14 CISARANTEN KULON';
+  const nmid = appConfig.pgQrisNmid || 'ID102604140001';
+
+  // Format QRIS EMV Payload Representation
+  const qrisPayload = `00020101021226${String(nmid.length + 8).padStart(2, '0')}0014ID.LINKAJA.WWW0118${nmid}51440014ID.CO.QRIS.WWW0215ID1026041400010303UME520454995303360540${String(nominal).length}${nominal}5802ID59${String(merchant.length).padStart(2, '0')}${merchant}6007BANDUNG61054029362${String((warga ? warga.nama.slice(0, 18) : 'WARGA').length + 4).padStart(2, '0')}01${String((warga ? warga.nama.slice(0, 18) : 'WARGA').length).padStart(2, '0')}${warga ? warga.nama.slice(0, 18) : 'WARGA'}6304ABCD`;
+
+  try {
+    if (typeof QRCode !== 'undefined') {
+      new QRCode(container, {
+        text: qrisPayload,
+        width: 210,
+        height: 210,
+        colorDark: "#020617",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } else {
+      drawFallbackQrisSvg(container, nominal, merchant);
+    }
+  } catch (err) {
+    console.warn('QR Code rendering fallback:', err);
+    drawFallbackQrisSvg(container, nominal, merchant);
+  }
+}
+
+function drawFallbackQrisSvg(container, nominal, merchant) {
+  container.innerHTML = `
+    <div class="w-[210px] h-[210px] bg-white p-2 rounded-xl border border-slate-300 flex flex-col items-center justify-center relative shadow-inner">
+      <svg viewBox="0 0 100 100" class="w-full h-full text-slate-900">
+        <rect x="5" y="5" width="26" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="4"/>
+        <rect x="11" y="11" width="14" height="14" fill="currentColor"/>
+        <rect x="69" y="5" width="26" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="4"/>
+        <rect x="75" y="11" width="14" height="14" fill="currentColor"/>
+        <rect x="5" y="69" width="26" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="4"/>
+        <rect x="11" y="75" width="14" height="14" fill="currentColor"/>
+        <!-- Matrix dots representation -->
+        <rect x="36" y="8" width="5" height="5" fill="currentColor"/>
+        <rect x="46" y="8" width="5" height="5" fill="currentColor"/>
+        <rect x="56" y="8" width="5" height="5" fill="currentColor"/>
+        <rect x="36" y="18" width="5" height="5" fill="currentColor"/>
+        <rect x="46" y="24" width="5" height="5" fill="currentColor"/>
+        <rect x="8" y="36" width="5" height="5" fill="currentColor"/>
+        <rect x="18" y="42" width="5" height="5" fill="currentColor"/>
+        <rect x="28" y="36" width="5" height="5" fill="currentColor"/>
+        <rect x="38" y="38" width="8" height="8" fill="currentColor"/>
+        <rect x="52" y="38" width="8" height="8" fill="currentColor"/>
+        <rect x="44" y="48" width="12" height="12" fill="currentColor"/>
+        <rect x="68" y="36" width="5" height="5" fill="currentColor"/>
+        <rect x="78" y="42" width="5" height="5" fill="currentColor"/>
+        <rect x="88" y="36" width="5" height="5" fill="currentColor"/>
+        <rect x="36" y="68" width="5" height="5" fill="currentColor"/>
+        <rect x="48" y="72" width="5" height="5" fill="currentColor"/>
+        <rect x="58" y="68" width="5" height="5" fill="currentColor"/>
+        <rect x="68" y="76" width="8" height="8" fill="currentColor"/>
+        <rect x="82" y="76" width="8" height="8" fill="currentColor"/>
+      </svg>
+      <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div class="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-[9px] shadow-md border-2 border-white">
+          RT04
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function unduhGambarQris() {
+  const container = document.getElementById('qrisPaymentCanvas');
+  if (!container) return;
+
+  const canvas = container.querySelector('canvas');
+  if (canvas) {
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `QRIS_IURAN_RT04_${CURRENT_YEAR}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast('Gambar QRIS berhasil diunduh!');
+    return;
+  }
+
+  const img = container.querySelector('img');
+  if (img && img.src) {
+    const a = document.createElement('a');
+    a.href = img.src;
+    a.download = `QRIS_IURAN_RT04_${CURRENT_YEAR}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast('Gambar QRIS berhasil diunduh!');
+    return;
+  }
+
+  showToast('Fitur unduh siap digunakan!');
+}
+
+// Router View Utama Tab "Bayar Iuran"
+function renderBayarIuran() {
+  const pendingCount = (db.pembayaran || []).filter(p => p.status === 'Menunggu Verifikasi').length;
+
+  return `
+    <div class="p-4 lg:p-6 space-y-4 text-left">
+      <!-- Header Banner Self-Hosted Payment Gateway -->
+      <div class="bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 border border-emerald-500/30 rounded-3xl p-5 text-white shadow-xl relative overflow-hidden">
+        <div class="relative z-10 space-y-2">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <span class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] font-black bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 uppercase tracking-wide">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+              Self-Hosted Gateway Aktif • RT 04 / RW 14
+            </span>
+            <span class="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+              0% Fee • Langsung Kas RT
+            </span>
+          </div>
+
+          <h2 class="text-xl font-black font-display tracking-tight text-white">
+            Portal Pembayaran Iuran Warga Mandiri
+          </h2>
+          <p class="text-xs text-emerald-100/90 leading-relaxed max-w-2xl">
+            Sistem pembayaran mandiri tanpa perantara pihak ketiga. Warga dapat membayar iuran bulanan RT 04 kapan saja menggunakan <b>QRIS</b> (semua m-Banking & e-Wallet) atau <b>Transfer Rekening Kas RT</b>.
+          </p>
+
+          <!-- Navigasi Sub-Tab Gateway -->
+          <div class="pt-3 flex items-center gap-2 flex-wrap">
+            <button onclick="subTabBayar = 'portal'; renderApp();" class="px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center space-x-1.5 ${
+              subTabBayar === 'portal' 
+                ? 'bg-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/30 scale-[1.02]' 
+                : 'bg-white/10 text-emerald-100 hover:bg-white/20 border border-white/10'
+            }">
+              <i class="ph-bold ph-credit-card text-sm"></i>
+              <span>💳 Bayar Iuran Mandiri</span>
+            </button>
+
+            <button onclick="subTabBayar = 'riwayat'; renderApp();" class="px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center space-x-1.5 ${
+              subTabBayar === 'riwayat' 
+                ? 'bg-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/30 scale-[1.02]' 
+                : 'bg-white/10 text-emerald-100 hover:bg-white/20 border border-white/10'
+            }">
+              <i class="ph-bold ph-receipt text-sm"></i>
+              <span>🔍 Riwayat & Status Tagihan</span>
+            </button>
+
+            <button onclick="subTabBayar = 'verifikasi'; renderApp();" class="px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center space-x-1.5 relative ${
+              subTabBayar === 'verifikasi' 
+                ? 'bg-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/30 scale-[1.02]' 
+                : 'bg-white/10 text-emerald-100 hover:bg-white/20 border border-white/10'
+            }">
+              <i class="ph-bold ph-shield-check text-sm"></i>
+              <span>📋 Verifikasi Pengurus</span>
+              ${pendingCount > 0 ? `
+                <span class="ml-1 px-1.5 py-0.2 rounded-full text-[9px] font-black bg-rose-500 text-white animate-pulse">
+                  ${pendingCount}
+                </span>
+              ` : ''}
+            </button>
+          </div>
+        </div>
+        <div class="absolute -right-8 -bottom-10 w-44 h-44 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      </div>
+
+      <!-- Konten Sub-Tab Aktif -->
+      ${subTabBayar === 'portal' 
+        ? renderBayarPortalView() 
+        : (subTabBayar === 'riwayat' 
+            ? renderBayarRiwayatView() 
+            : renderBayarVerifikasiView())}
+    </div>
+  `;
+}
+
+// Sub-Tab 1: Formulir Portal Pembayaran Mandiri
+function renderBayarPortalView() {
+  const tarif = Number(appConfig.tarifIuran) || 75000;
+  
+  // Auto-select warga pertama jika belum dipilih
+  if (!bayarSelectedWargaId && db.warga.length > 0) {
+    bayarSelectedWargaId = db.warga[0].id;
+    const unpaid = getUnpaidMonthsForWarga(db.warga[0].nama);
+    const targetBulanIni = `${CURRENT_MONTH_NAME} ${CURRENT_YEAR}`;
+    if (unpaid.includes(targetBulanIni)) {
+      bayarSelectedBulan = [targetBulanIni];
+    } else if (unpaid.length > 0) {
+      bayarSelectedBulan = [unpaid[0]];
+    }
+    if (bayarKodeUnik === 0) bayarKodeUnik = generateRandomKodeUnik();
+  }
+
+  const warga = db.warga.find(w => w.id === bayarSelectedWargaId) || db.warga[0];
+  const unpaidMonths = warga ? getUnpaidMonthsForWarga(warga.nama) : [];
+  const pendingMonths = warga ? getPendingMonthsForWarga(warga.nama) : [];
+
+  const countBulan = bayarSelectedBulan.length;
+  const subtotal = countBulan * tarif;
+  const kodeUnik = appConfig.pgGunakanKodeUnik !== false ? (bayarKodeUnik || 124) : 0;
+  const totalBayar = subtotal + (countBulan > 0 ? kodeUnik : 0);
+
+  // Filter pencarian warga di dropdown
+  const qWarga = bayarSearchFilter.toLowerCase().trim();
+  const filteredWarga = db.warga.filter(w => {
+    if (!qWarga) return true;
+    return w.nama.toLowerCase().includes(qWarga) || (w.noRumah && w.noRumah.toLowerCase().includes(qWarga));
+  });
+
+  return `
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+      
+      <!-- Kolom Kiri: Formulir Pemilihan KK, Bulan, & Konfirmasi (7 Kolom) -->
+      <div class="lg:col-span-7 space-y-4">
+        
+        <!-- STEP 1: Pilih Identitas Warga / KK -->
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-3.5">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div class="flex items-center space-x-2">
+              <span class="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-black">1</span>
+              <h3 class="text-xs font-black text-slate-900 uppercase tracking-wide">Pilih Kepala Keluarga / Rumah</h3>
+            </div>
+            <span class="text-[11px] text-slate-400 font-bold">Wajib</span>
+          </div>
+
+          <!-- Input Filter Cepat Warga -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Cari Nama KK atau Nomor Rumah</label>
+            <div class="relative">
+              <i class="ph-bold ph-magnifying-glass absolute left-3.5 top-3 text-slate-400"></i>
+              <input type="text" 
+                value="${bayarSearchFilter}" 
+                oninput="bayarSearchFilter = this.value; renderApp();" 
+                placeholder="Ketik nama KK atau blok rumah (misal: Bambang / Ciskul 9)..." 
+                class="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+          </div>
+
+          <!-- Dropdown Pilihan Warga -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Daftar Kepala Keluarga RT 04 (${filteredWarga.length} Terdaftar)</label>
+            <select onchange="selectBayarWarga(this.value)" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              ${filteredWarga.map(w => `
+                <option value="${w.id}" ${w.id === bayarSelectedWargaId ? 'selected' : ''}>
+                  ${w.nama} • ${w.noRumah} (${w.status})
+                </option>
+              `).join('')}
+            </select>
+          </div>
+
+          <!-- Kartu Ringkasan Warga Terpilih -->
+          ${warga ? `
+            <div class="p-3.5 bg-gradient-to-br from-emerald-50/70 to-teal-50/40 rounded-2xl border border-emerald-200/80 space-y-2">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h4 class="text-xs font-black text-slate-900 font-display">${warga.nama}</h4>
+                  <p class="text-[11px] text-slate-500">${warga.noRumah} • Status: <span class="font-bold text-emerald-800">${warga.status}</span></p>
+                </div>
+                <span class="px-2.5 py-1 rounded-full text-[10px] font-black ${
+                  unpaidMonths.length === 0 
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                    : 'bg-amber-100 text-amber-800 border border-amber-300'
+                }">
+                  ${unpaidMonths.length === 0 ? '✨ Iuran Tahun Ini Lunas' : `⚠️ ${unpaidMonths.length} Bulan Belum Lunas`}
+                </span>
+              </div>
+
+              ${pendingMonths.length > 0 ? `
+                <div class="p-2 bg-amber-50 rounded-xl border border-amber-200/70 text-[11px] text-amber-900 flex items-center gap-1.5">
+                  <i class="ph-bold ph-hourglass-high text-amber-600 text-sm"></i>
+                  <span>Ada pembayaran <b>${pendingMonths.join(', ')}</b> yang sedang menunggu verifikasi bendahara.</span>
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- STEP 2: Pilih Bulan yang Ingin Dibayarkan -->
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-3.5">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+            <div class="flex items-center space-x-2">
+              <span class="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-black">2</span>
+              <h3 class="text-xs font-black text-slate-900 uppercase tracking-wide">Pilih Periode Bulan Iuran (${CURRENT_YEAR})</h3>
+            </div>
+            <span class="text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              Tarif: Rp ${tarif.toLocaleString('id-ID')} / bln
+            </span>
+          </div>
+
+          <!-- Tombol Pintas Seleksi Cepat -->
+          <div class="flex flex-wrap gap-1.5">
+            <button type="button" onclick="pilihSemuaTunggakanBayar('${warga ? warga.id : ''}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-[11px] font-bold transition flex items-center gap-1 active:scale-95 shadow-2xs">
+              <i class="ph-bold ph-lightning"></i>
+              <span>Lunasi Tunggakan</span>
+            </button>
+            <button type="button" onclick="pilihPaketBulan(1, '${warga ? warga.id : ''}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition active:scale-95">
+              1 Bulan
+            </button>
+            <button type="button" onclick="pilihPaketBulan(3, '${warga ? warga.id : ''}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition active:scale-95">
+              3 Bulan (1 Triwulan)
+            </button>
+            <button type="button" onclick="pilihPaketBulan(6, '${warga ? warga.id : ''}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition active:scale-95">
+              6 Bulan (1 Semester)
+            </button>
+            <button type="button" onclick="pilihPaketBulan(12, '${warga ? warga.id : ''}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition active:scale-95">
+              1 Tahun Penuh (12 Bulan)
+            </button>
+          </div>
+
+          <!-- Grid Pilihan 12 Bulan -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 pt-1">
+            ${NAMA_BULAN_ID.map(mName => {
+              const bulanStr = `${mName} ${CURRENT_YEAR}`;
+              const isLunas = warga ? db.iuran.some(i => i.nama.toLowerCase().trim() === warga.nama.toLowerCase().trim() && i.bulan.toLowerCase().trim() === bulanStr.toLowerCase().trim() && i.status === 'Lunas') : false;
+              const isPending = pendingMonths.includes(bulanStr);
+              const isSelected = bayarSelectedBulan.includes(bulanStr);
+
+              return `
+                <div onclick="${isLunas || isPending ? '' : `toggleBayarBulan('${bulanStr}')`}" 
+                  class="p-2.5 rounded-2xl border text-center transition select-none ${
+                    isLunas 
+                      ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-70 cursor-not-allowed' 
+                      : (isPending 
+                          ? 'bg-amber-50/80 border-amber-200 text-amber-700 cursor-not-allowed' 
+                          : (isSelected 
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-[1.02] cursor-pointer' 
+                              : 'bg-slate-50 hover:bg-emerald-50/50 border-slate-200/90 text-slate-700 cursor-pointer'))
+                  }">
+                  <div class="flex items-center justify-between text-[10px] font-bold">
+                    <span>${mName.slice(0, 3)}</span>
+                    ${isLunas 
+                      ? '<i class="ph-bold ph-check text-emerald-600"></i>' 
+                      : (isPending 
+                          ? '<i class="ph-bold ph-clock text-amber-600"></i>' 
+                          : (isSelected 
+                              ? '<i class="ph-bold ph-check-circle text-white"></i>' 
+                              : '<i class="ph-bold ph-circle text-slate-300"></i>'))}
+                  </div>
+                  <p class="text-xs font-black mt-1 ${isSelected ? 'text-white' : 'text-slate-800'}">${mName}</p>
+                  <span class="text-[9px] block mt-0.5 ${isSelected ? 'text-emerald-100 font-bold' : (isLunas ? 'text-emerald-700 font-bold' : (isPending ? 'text-amber-700 font-bold' : 'text-slate-400'))}">
+                    ${isLunas ? 'Sudah Lunas' : (isPending ? 'Pending Verif' : `Rp ${(tarif / 1000)}rb`)}
+                  </span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          ${countBulan === 0 ? `
+            <p class="text-xs text-rose-600 font-bold pt-1">
+              * Silakan pilih minimal 1 bulan iuran di atas untuk melanjutkan pembayaran.
+            </p>
+          ` : `
+            <div class="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between">
+              <span>Bulan dipilih (<b>${countBulan} Bulan</b>): <b>${bayarSelectedBulan.join(', ')}</b></span>
+              <button onclick="bayarSelectedBulan = []; renderApp();" class="text-[11px] text-rose-600 hover:underline font-bold">Batal Pilih</button>
+            </div>
+          `}
+        </div>
+
+        <!-- STEP 3: Formulir Konfirmasi Mandiri & Unggah Bukti -->
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div class="flex items-center space-x-2">
+              <span class="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-black">3</span>
+              <h3 class="text-xs font-black text-slate-900 uppercase tracking-wide">Konfirmasi & Bukti Pembayaran</h3>
+            </div>
+            <span class="text-[11px] text-slate-400 font-bold">Langkah Terakhir</span>
+          </div>
+
+          <form onsubmit="submitKonfirmasiPembayaran(event)" class="space-y-3.5">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Nama Pemilik Rekening / Pengirim</label>
+                <input type="text" id="bayarNamaPengirim" required value="${warga ? warga.nama : ''}" placeholder="Nama di rekening bank / e-wallet pengirim" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              </div>
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Tanggal & Waktu Transfer</label>
+                <input type="text" id="bayarTglBayar" value="${new Date().toISOString().replace('T', ' ').slice(0, 16)}" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              </div>
+            </div>
+
+            <!-- Upload Bukti Transfer -->
+            <div>
+              <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Unggah Foto / Screenshot Bukti Bayar</label>
+              ${bayarUploadedBuktiBase64 ? `
+                <div class="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between">
+                  <div class="flex items-center space-x-3">
+                    <img src="${bayarUploadedBuktiBase64}" alt="Bukti Transfer" class="w-12 h-12 rounded-xl object-cover border border-emerald-300">
+                    <div>
+                      <p class="text-xs font-bold text-emerald-900">Bukti Transfer Terlampir</p>
+                      <p class="text-[10px] text-emerald-600 font-medium">Gambar siap diverifikasi pengurus</p>
+                    </div>
+                  </div>
+                  <button type="button" onclick="hapusBayarBuktiUpload()" class="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition text-xs font-bold flex items-center gap-1">
+                    <i class="ph-bold ph-trash text-sm"></i>
+                    <span>Hapus</span>
+                  </button>
+                </div>
+              ` : `
+                <label class="border-2 border-dashed border-slate-200 hover:border-emerald-400 bg-slate-50/70 hover:bg-emerald-50/30 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition text-center group">
+                  <i class="ph-bold ph-camera text-2xl text-slate-400 group-hover:text-emerald-600 mb-1"></i>
+                  <span class="text-xs font-bold text-slate-700 group-hover:text-emerald-900">Klik untuk Pilih Gambar Bukti Transfer</span>
+                  <span class="text-[10.5px] text-slate-400 mt-0.5">Mendukung format JPG, PNG, atau Screenshot m-Banking / e-Wallet</span>
+                  <input type="file" accept="image/*" onchange="handleBayarBuktiUpload(event)" class="hidden">
+                </label>
+              `}
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Catatan Tambahan (Opsional)</label>
+              <input type="text" id="bayarCatatan" placeholder="Contoh: Transfer via Livin Mandiri / BCA mobile..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+
+            <!-- Tombol Kirim Konfirmasi -->
+            <div class="pt-2 flex flex-col sm:flex-row items-center gap-2">
+              <button type="submit" ${countBulan === 0 ? 'disabled' : ''} class="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/30 transition active:scale-95 flex items-center justify-center gap-2">
+                <i class="ph-bold ph-paper-plane-tilt text-base"></i>
+                <span>Konfirmasi Pembayaran Mandiri</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+      </div>
+
+      <!-- Kolom Kanan: Rincian Tagihan, Kode Unik, & Tampilan QRIS / Rekening RT (5 Kolom) -->
+      <div class="lg:col-span-5 space-y-4">
+        
+        <!-- Bento Card: Total Tagihan & Kode Unik -->
+        <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-brand-950 text-white p-5 rounded-3xl shadow-xl space-y-4 border border-slate-800">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-black uppercase text-emerald-400 tracking-wider flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+              Rincian Tagihan Pembayaran
+            </span>
+            <span class="text-[10.5px] font-bold text-slate-400">
+              ${countBulan} Bulan Terpilih
+            </span>
+          </div>
+
+          <div>
+            <span class="text-[11px] text-slate-400 font-medium">Total Yang Harus Ditransfer:</span>
+            <div class="flex items-baseline space-x-2 mt-0.5">
+              <p class="text-3xl font-black font-display tracking-tight text-white">
+                Rp ${totalBayar.toLocaleString('id-ID')}
+              </p>
+              <button onclick="salinKeClipboard('${totalBayar}', 'Nominal Rp ${totalBayar.toLocaleString('id-ID')} berhasil disalin!')" title="Salin Nominal Tepat" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 text-[10px] font-bold border border-slate-700 flex items-center gap-1 active:scale-95">
+                <i class="ph-bold ph-copy"></i>
+                <span>Salin</span>
+              </button>
+            </div>
+            <p class="text-[10.5px] text-emerald-300 mt-1">
+              * Harap transfer nominal tepat hingga 3 digit terakhir untuk pencocokan otomatis.
+            </p>
+          </div>
+
+          <div class="pt-3 border-t border-slate-800/80 space-y-2 text-xs">
+            <div class="flex justify-between text-slate-300">
+              <span>Subtotal Iuran (${countBulan} Bulan x Rp ${tarif.toLocaleString('id-ID')}):</span>
+              <span class="font-bold">Rp ${subtotal.toLocaleString('id-ID')}</span>
+            </div>
+            ${appConfig.pgGunakanKodeUnik !== false ? `
+              <div class="flex justify-between text-emerald-300 bg-emerald-950/40 p-2 rounded-xl border border-emerald-500/20">
+                <span class="flex items-center gap-1">
+                  <i class="ph-bold ph-fingerprint"></i>
+                  <span>Kode Unik Verifikasi (3 Digit):</span>
+                </span>
+                <span class="font-mono font-black text-sm text-emerald-200">+ Rp ${kodeUnik}</span>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- Pemilihan Metode Pembayaran (Tabs Card) -->
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+            <h3 class="text-xs font-black text-slate-900 uppercase tracking-wide">Pilih Metode Pembayaran</h3>
+            <span class="text-[10px] font-bold text-slate-400">Bebas Biaya Admin</span>
+          </div>
+
+          <!-- Selector Tab Opsi QRIS vs Bank -->
+          <div class="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl">
+            <button onclick="gantiMetodeBayar('qris')" class="py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+              bayarMetode === 'qris' 
+                ? 'bg-white text-emerald-800 shadow-sm font-black' 
+                : 'text-slate-600 hover:text-slate-900'
+            }">
+              <i class="ph-bold ph-qr-code text-base text-emerald-600"></i>
+              <span>QRIS RT 04</span>
+            </button>
+            <button onclick="gantiMetodeBayar('bank')" class="py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+              bayarMetode === 'bank' 
+                ? 'bg-white text-emerald-800 shadow-sm font-black' 
+                : 'text-slate-600 hover:text-slate-900'
+            }">
+              <i class="ph-bold ph-bank text-base text-sky-600"></i>
+              <span>Rekening RT</span>
+            </button>
+          </div>
+
+          <!-- KONTEN METODE 1: QRIS RT 04 -->
+          ${bayarMetode === 'qris' ? `
+            <div class="space-y-4">
+              <!-- Official Indonesian QRIS Frame -->
+              <div class="bg-white border-2 border-slate-800 rounded-2xl overflow-hidden shadow-md max-w-[280px] mx-auto text-center">
+                <!-- Red Top Header -->
+                <div class="bg-[#e11d48] text-white px-3 py-2 flex items-center justify-between">
+                  <div class="flex items-center space-x-1.5">
+                    <span class="font-black text-sm tracking-wider font-display">QRIS</span>
+                    <span class="text-[8px] font-bold tracking-tight bg-white/20 px-1 py-0.2 rounded">NASIONAL</span>
+                  </div>
+                  <span class="text-[8.5px] font-bold uppercase tracking-wider text-white/90">GPN</span>
+                </div>
+
+                <!-- Merchant Name & NMID -->
+                <div class="px-3 pt-2.5 pb-1">
+                  <h4 class="text-xs font-black text-slate-900 uppercase font-display leading-tight">
+                    ${appConfig.pgQrisMerchant || 'RT 04 RW 14 CISARANTEN KULON'}
+                  </h4>
+                  <p class="text-[9.5px] font-mono text-slate-500 font-semibold mt-0.5">
+                    NMID: ${appConfig.pgQrisNmid || 'ID102604140001'}
+                  </p>
+                </div>
+
+                <!-- QR Canvas Container -->
+                <div class="p-2 flex items-center justify-center">
+                  ${appConfig.pgQrisImg ? `
+                    <img src="${appConfig.pgQrisImg}" alt="QRIS RT 04" class="w-[210px] h-[210px] object-contain rounded-xl">
+                  ` : `
+                    <div id="qrisPaymentCanvas" class="flex items-center justify-center min-h-[210px]">
+                      <!-- Generated by initQrisCode() -->
+                    </div>
+                  `}
+                </div>
+
+                <!-- Footer Box Inside QR Frame -->
+                <div class="bg-slate-50 px-3 py-2 border-t border-slate-200 text-[10px] font-bold text-slate-600 flex items-center justify-between">
+                  <span>Nominal:</span>
+                  <span class="font-black text-emerald-800 text-xs">Rp ${totalBayar.toLocaleString('id-ID')}</span>
+                </div>
+              </div>
+
+              <!-- Action Buttons for QRIS -->
+              <div class="flex items-center justify-center gap-2 pt-1">
+                <button onclick="unduhGambarQris()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-200 active:scale-95">
+                  <i class="ph-bold ph-download-simple"></i>
+                  <span>Unduh QRIS</span>
+                </button>
+                <button onclick="salinKeClipboard('${totalBayar}', 'Nominal Rp ${totalBayar.toLocaleString('id-ID')} disalin!')" class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-emerald-200 active:scale-95">
+                  <i class="ph-bold ph-copy"></i>
+                  <span>Salin Nominal</span>
+                </button>
+              </div>
+
+              <!-- Petunjuk Scan QRIS -->
+              <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                <p class="font-bold text-slate-800 flex items-center gap-1">
+                  <i class="ph-bold ph-info text-emerald-600"></i>
+                  <span>Cara Pembayaran QRIS:</span>
+                </p>
+                <ol class="list-decimal list-inside space-y-0.5 text-[10.5px] text-slate-600 pl-1">
+                  <li>Buka m-Banking (BCA, Mandiri, BRI, BNI, BSI, BJB) atau e-Wallet (GoPay, OVO, Dana, ShopeePay).</li>
+                  <li>Pilih menu <b>Scan / Bayar QRIS</b> dan scan gambar di atas.</li>
+                  <li>Masukkan nominal tepat: <b>Rp ${totalBayar.toLocaleString('id-ID')}</b>.</li>
+                  <li>Simpan screenshot bukti pembayaran lalu unggah pada form di samping.</li>
+                </ol>
+              </div>
+            </div>
+          ` : `
+            <!-- KONTEN METODE 2: TRANSFER REKENING BANK RT -->
+            <div class="space-y-4">
+              <!-- Visual Bank Debit Card Graphic -->
+              <div class="bg-gradient-to-br from-slate-900 via-sky-950 to-slate-900 text-white p-5 rounded-2xl border border-sky-500/30 shadow-lg relative overflow-hidden">
+                <div class="flex items-center justify-between mb-4">
+                  <span class="text-xs font-black tracking-wider uppercase text-sky-300 font-display flex items-center gap-1.5">
+                    <i class="ph-bold ph-bank text-sm"></i>
+                    ${appConfig.pgNamaBank || 'Bank Mandiri'}
+                  </span>
+                  <span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-white/20 text-white tracking-widest uppercase">
+                    REKENING KAS RT 04
+                  </span>
+                </div>
+
+                <!-- EMV Chip Graphic -->
+                <div class="w-10 h-7 rounded-md bg-gradient-to-tr from-amber-300 to-yellow-500 border border-amber-200 shadow-sm mb-3 relative overflow-hidden">
+                  <div class="absolute inset-0 border-t border-b border-amber-600/40 top-2 bottom-2"></div>
+                </div>
+
+                <div class="space-y-1">
+                  <span class="text-[10px] text-sky-200/80 uppercase font-semibold">Nomor Rekening:</span>
+                  <div class="flex items-center justify-between">
+                    <span class="text-lg font-mono font-black tracking-wider text-white">
+                      ${appConfig.pgNoRekening || '131-00-140414-9'}
+                    </span>
+                    <button onclick="salinKeClipboard('${appConfig.pgNoRekening || '131-00-140414-9'}', 'Nomor Rekening RT berhasil disalin!')" class="px-2.5 py-1 bg-white text-slate-900 hover:bg-sky-50 rounded-lg text-xs font-black transition flex items-center gap-1 shadow active:scale-95">
+                      <i class="ph-bold ph-copy"></i>
+                      <span>Salin</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="pt-3 mt-3 border-t border-sky-800/60 flex items-center justify-between text-[11px]">
+                  <div>
+                    <span class="text-[9.5px] text-sky-200/70 block uppercase">Atas Nama Penerima:</span>
+                    <span class="font-bold text-white tracking-wide">${appConfig.pgAtasNama || 'KAS RT 04 CISKUL'}</span>
+                  </div>
+                  <span class="text-xs font-black text-emerald-400 font-mono">RT 04 / RW 14</span>
+                </div>
+              </div>
+
+              <!-- Petunjuk Transfer Bank -->
+              <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                <p class="font-bold text-slate-800 flex items-center gap-1">
+                  <i class="ph-bold ph-info text-sky-600"></i>
+                  <span>Panduan Transfer Rekening:</span>
+                </p>
+                <ol class="list-decimal list-inside space-y-0.5 text-[10.5px] text-slate-600 pl-1">
+                  <li>Lakukan transfer via Mobile Banking, Internet Banking, atau ATM ke nomor rekening di atas.</li>
+                  <li>Pastikan nominal transfer tepat <b>Rp ${totalBayar.toLocaleString('id-ID')}</b> (termasuk kode unik).</li>
+                  <li>Simpan struk / bukti transfer dan unggah pada formulir konfirmasi.</li>
+                </ol>
+              </div>
+            </div>
+          `}
+        </div>
+
+      </div>
+
+    </div>
+  `;
+}
+
+// Sub-Tab 2: Riwayat & Status Tagihan Warga
+function renderBayarRiwayatView() {
+  const list = db.pembayaran || [];
+  const q = bayarRiwayatSearch.toLowerCase().trim();
+
+  const filtered = list.filter(p => {
+    const matchStatus = bayarRiwayatFilterStatus === 'semua' || p.status === bayarRiwayatFilterStatus;
+    const matchQ = !q || (
+      p.id.toLowerCase().includes(q) ||
+      (p.namaWarga && p.namaWarga.toLowerCase().includes(q)) ||
+      (p.noRumah && p.noRumah.toLowerCase().includes(q))
+    );
+    return matchStatus && matchQ;
+  });
+
+  return `
+    <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
+      <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
+        <div>
+          <h3 class="text-xs font-black text-slate-900 uppercase tracking-wide font-display">
+            Riwayat & Status Pembayaran Mandiri
+          </h3>
+          <p class="text-[11px] text-slate-500">Cari nota invoice, lacak status verifikasi, dan cetak kwitansi resmi</p>
+        </div>
+        <span class="text-xs font-bold text-slate-400">${filtered.length} Transaksi Tercatat</span>
+      </div>
+
+      <!-- Filter & Pencarian Bar -->
+      <div class="flex flex-col sm:flex-row items-center gap-2">
+        <div class="relative flex-1 w-full">
+          <i class="ph-bold ph-magnifying-glass absolute left-3.5 top-3 text-slate-400"></i>
+          <input type="text" 
+            value="${bayarRiwayatSearch}" 
+            oninput="bayarRiwayatSearch = this.value; renderApp();" 
+            placeholder="Cari berdasarkan No. Invoice, Nama KK, atau No. Rumah..." 
+            class="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+
+        <div class="flex items-center space-x-1 overflow-x-auto w-full sm:w-auto scrollbar-none pb-1 sm:pb-0">
+          <button onclick="bayarRiwayatFilterStatus = 'semua'; renderApp();" class="px-3 py-2 rounded-xl text-xs font-bold transition flex-shrink-0 ${bayarRiwayatFilterStatus === 'semua' ? 'bg-slate-900 text-white font-black' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+            Semua
+          </button>
+          <button onclick="bayarRiwayatFilterStatus = 'Menunggu Verifikasi'; renderApp();" class="px-3 py-2 rounded-xl text-xs font-bold transition flex-shrink-0 ${bayarRiwayatFilterStatus === 'Menunggu Verifikasi' ? 'bg-amber-600 text-white font-black' : 'bg-amber-50 text-amber-800 hover:bg-amber-100'}">
+            Menunggu Verifikasi
+          </button>
+          <button onclick="bayarRiwayatFilterStatus = 'Lunas'; renderApp();" class="px-3 py-2 rounded-xl text-xs font-bold transition flex-shrink-0 ${bayarRiwayatFilterStatus === 'Lunas' ? 'bg-emerald-600 text-white font-black' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'}">
+            Lunas
+          </button>
+          <button onclick="bayarRiwayatFilterStatus = 'Ditolak'; renderApp();" class="px-3 py-2 rounded-xl text-xs font-bold transition flex-shrink-0 ${bayarRiwayatFilterStatus === 'Ditolak' ? 'bg-rose-600 text-white font-black' : 'bg-rose-50 text-rose-800 hover:bg-rose-100'}">
+            Ditolak
+          </button>
+        </div>
+      </div>
+
+      <!-- Daftar Card Riwayat Transaksi -->
+      <div class="space-y-3">
+        ${filtered.length === 0 ? `
+          <div class="p-8 text-center bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+            <i class="ph-bold ph-receipt text-3xl text-slate-300"></i>
+            <h4 class="text-xs font-bold text-slate-600">Tidak ada riwayat pembayaran yang cocok</h4>
+            <p class="text-[11px] text-slate-400">Silakan ubah kata kunci pencarian atau buat pembayaran baru.</p>
+          </div>
+        ` : filtered.map(p => {
+          const isLunas = p.status === 'Lunas';
+          const isPending = p.status === 'Menunggu Verifikasi';
+          const isDitolak = p.status === 'Ditolak';
+          const bulanStr = Array.isArray(p.bulanList) ? p.bulanList.join(', ') : p.bulanList;
+
+          return `
+            <div class="p-4 bg-slate-50 hover:bg-emerald-50/30 rounded-2xl border border-slate-200/80 transition flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-2xs">
+              <div class="space-y-1">
+                <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+                  <span class="text-xs font-black font-mono text-slate-900">${p.id}</span>
+                  <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                    isLunas 
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                      : (isPending 
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse' 
+                          : 'bg-rose-100 text-rose-800 border border-rose-300')
+                  }">
+                    ${p.status}
+                  </span>
+                  <span class="text-[10px] font-bold text-slate-500">
+                    • ${p.metode === 'qris' ? '📱 QRIS RT 04' : `🏦 Bank ${appConfig.pgNamaBank || 'Mandiri'}`}
+                  </span>
+                  <span class="text-[10px] text-slate-400">• ${p.tglTransaksi}</span>
+                </div>
+
+                <div class="flex items-center space-x-2 pt-0.5">
+                  <h4 class="text-xs font-black text-slate-900 font-display">${p.namaWarga}</h4>
+                  <span class="text-slate-400">•</span>
+                  <span class="text-xs text-slate-600 font-medium">${p.noRumah}</span>
+                </div>
+
+                <p class="text-[11px] text-slate-500">
+                  Bulan: <b class="text-emerald-800 font-bold">${bulanStr}</b>
+                  ${p.catatan ? ` • <span class="italic text-slate-400">"${p.catatan}"</span>` : ''}
+                </p>
+              </div>
+
+              <!-- Kolom Kanan: Nominal & Tombol Aksi -->
+              <div class="flex items-center justify-between md:justify-end space-x-3 pt-2 md:pt-0 border-t md:border-t-0 border-slate-200">
+                <div class="text-left md:text-right">
+                  <span class="text-[10px] text-slate-400 block font-semibold">Total Pembayaran:</span>
+                  <p class="text-sm font-black text-slate-900 font-display">
+                    Rp ${(Number(p.totalBayar) || 0).toLocaleString('id-ID')}
+                  </p>
+                </div>
+
+                <div class="flex items-center space-x-1.5 flex-shrink-0">
+                  <button onclick="openModalInvoicePembayaran('${p.id}')" title="Lihat Invoice Rincian" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition shadow-2xs flex items-center gap-1 active:scale-95">
+                    <i class="ph-bold ph-file-text"></i>
+                    <span>Nota</span>
+                  </button>
+
+                  ${isLunas ? `
+                    <button onclick="openModalCetakKwitansiPayment('${p.id}')" title="Cetak Kwitansi Resmi RT" class="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1 active:scale-95">
+                      <i class="ph-bold ph-printer"></i>
+                      <span>Kwitansi</span>
+                    </button>
+                  ` : ''}
+
+                  <button onclick="bukaWhatsAppKonfirmasi('${p.id}')" title="Kirim ke WhatsApp Bendahara" class="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl transition active:scale-95">
+                    <i class="ph-bold ph-whatsapp-logo text-base"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// Sub-Tab 3: Verifikasi Pembayaran Masuk (Khusus Pengurus / Bendahara RT)
+function renderBayarVerifikasiView() {
+  const isAuthorized = canManageIuran();
+
+  if (!isAuthorized) {
+    return `
+      <div class="bg-white p-8 rounded-3xl border border-slate-200/90 shadow-sm text-center space-y-3">
+        <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center mx-auto text-2xl">
+          <i class="ph-bold ph-lock-key"></i>
+        </div>
+        <h3 class="text-sm font-black text-slate-900 font-display">Akses Khusus Pengurus & Bendahara RT</h3>
+        <p class="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+          Menu verifikasi pembayaran hanya dapat diakses oleh Bendahara RT, Ketua RT, atau Administrator yang telah login ke dalam sistem.
+        </p>
+        <button onclick="openModalLoginPengurus()" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-sm inline-flex items-center gap-1.5 active:scale-95">
+          <i class="ph-bold ph-sign-in"></i>
+          <span>Login Pengurus RT</span>
+        </button>
+      </div>
+    `;
+  }
+
+  const list = db.pembayaran || [];
+  const pendingList = list.filter(p => p.status === 'Menunggu Verifikasi');
+  const lunasList = list.filter(p => p.status === 'Lunas');
+  const totalDanaGateway = lunasList.reduce((acc, curr) => acc + (Number(curr.totalBayar) || 0), 0);
+
+  return `
+    <div class="space-y-4">
+      
+      <!-- Bento Metrics Pengurus Gateway -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="bg-gradient-to-br from-amber-500 to-amber-600 text-white p-4 rounded-3xl shadow-md space-y-1">
+          <div class="flex items-center justify-between text-amber-100 text-xs font-bold">
+            <span>Menunggu Verifikasi</span>
+            <i class="ph-bold ph-hourglass-high text-lg"></i>
+          </div>
+          <p class="text-2xl font-black font-display">${pendingList.length} Transaksi</p>
+          <p class="text-[10px] text-amber-100">Perlu dicocokkan dengan mutasi kas</p>
+        </div>
+
+        <div class="bg-gradient-to-br from-emerald-600 to-teal-700 text-white p-4 rounded-3xl shadow-md space-y-1">
+          <div class="flex items-center justify-between text-emerald-100 text-xs font-bold">
+            <span>Terverifikasi Lunas</span>
+            <i class="ph-bold ph-check-circle text-lg"></i>
+          </div>
+          <p class="text-2xl font-black font-display">${lunasList.length} Transaksi</p>
+          <p class="text-[10px] text-emerald-100">Otomatis masuk ke Buku Kas & Kartu Iuran</p>
+        </div>
+
+        <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 rounded-3xl shadow-md space-y-1">
+          <div class="flex items-center justify-between text-slate-300 text-xs font-bold">
+            <span>Total Dana Masuk Gateway</span>
+            <i class="ph-bold ph-wallet text-lg text-emerald-400"></i>
+          </div>
+          <p class="text-2xl font-black font-display text-emerald-400">Rp ${totalDanaGateway.toLocaleString('id-ID')}</p>
+          <p class="text-[10px] text-slate-400">Penerimaan iuran via QRIS & Transfer RT</p>
+        </div>
+      </div>
+
+      <!-- Antrean Verifikasi Masuk -->
+      <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div>
+            <h3 class="text-xs font-black text-slate-900 uppercase tracking-wide font-display">
+              Antrean Verifikasi Pembayaran Masuk (${pendingList.length})
+            </h3>
+            <p class="text-[11px] text-slate-500">Cek kesesuaian nominal kode unik dengan mutasi m-banking kas RT</p>
+          </div>
+          <span class="text-xs font-black px-2.5 py-0.5 rounded-full ${pendingList.length > 0 ? 'bg-amber-100 text-amber-800 animate-pulse' : 'bg-slate-100 text-slate-600'}">
+            ${pendingList.length} Pending
+          </span>
+        </div>
+
+        <div class="space-y-3">
+          ${pendingList.length === 0 ? `
+            <div class="p-8 text-center bg-emerald-50/50 rounded-2xl border border-emerald-100 space-y-2">
+              <i class="ph-bold ph-check-circle text-3xl text-emerald-600"></i>
+              <h4 class="text-xs font-black text-emerald-900">Semua Konfirmasi Pembayaran Telah Selesai Diverifikasi</h4>
+              <p class="text-[11px] text-slate-500">Tidak ada transaksi yang tertunda saat ini.</p>
+            </div>
+          ` : pendingList.map(p => {
+            const bulanStr = Array.isArray(p.bulanList) ? p.bulanList.join(', ') : p.bulanList;
+            return `
+              <div class="p-4 bg-amber-50/40 rounded-2xl border border-amber-200/80 space-y-3 shadow-2xs">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-amber-200/50">
+                  <div class="flex items-center space-x-2">
+                    <span class="text-xs font-black font-mono text-slate-900">${p.id}</span>
+                    <span class="text-[10px] font-bold text-slate-500">• ${p.tglTransaksi}</span>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                      ${p.metode === 'qris' ? 'QRIS RT' : 'Transfer Bank'}
+                    </span>
+                  </div>
+                  <div class="text-left sm:text-right">
+                    <span class="text-[10px] text-slate-500">Total Ditransfer:</span>
+                    <span class="text-sm font-black text-emerald-700 ml-1">Rp ${(Number(p.totalBayar) || 0).toLocaleString('id-ID')}</span>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-center text-xs">
+                  <div>
+                    <span class="text-[10px] text-slate-400 font-bold block uppercase">Warga / Rumah:</span>
+                    <p class="font-black text-slate-900">${p.namaWarga}</p>
+                    <p class="text-[11px] text-slate-500">${p.noRumah}</p>
+                  </div>
+                  <div>
+                    <span class="text-[10px] text-slate-400 font-bold block uppercase">Bulan Iuran & Rincian:</span>
+                    <p class="font-bold text-emerald-900">${bulanStr}</p>
+                    <p class="text-[10.5px] text-slate-500">Iuran: Rp ${(Number(p.nominalIuran) || 0).toLocaleString('id-ID')} + Unik: <b>Rp ${p.kodeUnik}</b></p>
+                  </div>
+                  <div>
+                    <span class="text-[10px] text-slate-400 font-bold block uppercase">Nama Pengirim / Catatan:</span>
+                    <p class="font-bold text-slate-800">${p.namaPengirim || p.namaWarga}</p>
+                    <p class="text-[10.5px] text-slate-500 italic">${p.catatan || 'Tanpa catatan'}</p>
+                  </div>
+                </div>
+
+                <!-- Action Bar Verifikasi -->
+                <div class="flex items-center justify-between pt-2 border-t border-amber-200/50 flex-wrap gap-2">
+                  <div class="flex items-center space-x-2">
+                    ${p.buktiBayar ? `
+                      <button onclick="openModalLihatBukti('${p.id}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1">
+                        <i class="ph-bold ph-image text-sm text-emerald-600"></i>
+                        <span>Lihat Bukti Foto</span>
+                      </button>
+                    ` : `
+                      <span class="text-[10.5px] text-slate-400 italic">Tanpa lampiran foto</span>
+                    `}
+                    <button onclick="bukaWhatsAppKonfirmasi('${p.id}')" class="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center gap-1">
+                      <i class="ph-bold ph-whatsapp-logo text-sm text-emerald-600"></i>
+                      <span>Chat Warga</span>
+                    </button>
+                  </div>
+
+                  <div class="flex items-center space-x-2">
+                    <button onclick="openModalTolakPembayaran('${p.id}')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition active:scale-95">
+                      Tolak
+                    </button>
+                    <button onclick="verifikasiPembayaranMasuk('${p.id}')" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95 flex items-center gap-1">
+                      <i class="ph-bold ph-check text-sm"></i>
+                      <span>Setujui & Lunaskan</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Handler Simpan Konfigurasi Payment Gateway di Panel Admin
+function handleSimpanConfigGateway(e) {
+  e.preventDefault();
+  appConfig.pgNamaBank = document.getElementById('configPgBank').value.trim();
+  appConfig.pgNoRekening = document.getElementById('configPgRekening').value.trim();
+  appConfig.pgAtasNama = document.getElementById('configPgAtasNama').value.trim();
+  appConfig.pgQrisMerchant = document.getElementById('configPgMerchant').value.trim();
+  appConfig.pgQrisNmid = document.getElementById('configPgNmid').value.trim();
+  appConfig.pgWaKonfirmasi = document.getElementById('configPgWa').value.trim();
+  appConfig.pgGunakanKodeUnik = document.getElementById('configPgKodeUnik').checked;
+  appConfig.pgPetunjuk = document.getElementById('configPgPetunjuk').value.trim();
+
+  kirimDataKeSheets('SAVE_CONFIG', appConfig);
+  showToast('Konfigurasi Self-Hosted Payment Gateway berhasil disimpan!');
+  renderApp();
+}
+
+function handleUploadQrisAdmin(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    appConfig.pgQrisImg = evt.target.result;
+    kirimDataKeSheets('SAVE_CONFIG', appConfig);
+    showToast('Gambar QRIS resmi RT 04 berhasil diunggah dan disimpan!');
+    renderApp();
+  };
+  reader.readAsDataURL(file);
+}
+
+function resetQrisImageAdmin() {
+  appConfig.pgQrisImg = '';
+  kirimDataKeSheets('SAVE_CONFIG', appConfig);
+  showToast('Gambar QRIS dikembalikan ke generator dinamis.');
+  renderApp();
+}
+
+// ==========================================
+// 4. HALAMAN WARGA & e-SENSUS
+// ==========================================
+
+// Helper Normalisasi Blok & Nomor Rumah
+function normalizeBlok(b) {
+  if (!b) return '';
+  let s = String(b).trim();
+  if (/^ciskul\s*1$/i.test(s) || /^ciskul\s*i$/i.test(s)) return 'Ciskul I';
+  return s;
+}
+
+function extractHouseNumber(noStr) {
+  if (!noStr) return null;
+  const m = String(noStr).match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
+function isSameNoRumah(addr1, addr2) {
+  if (!addr1 || !addr2) return false;
+  const a1 = String(addr1).trim();
+  const a2 = String(addr2).trim();
+  if (a1.toLowerCase() === a2.toLowerCase()) return true;
+
+  const parts1 = a1.split(/\s+/);
+  const parts2 = a2.split(/\s+/);
+  const blok1 = normalizeBlok(parts1.slice(0, 2).join(' ')).toLowerCase();
+  const blok2 = normalizeBlok(parts2.slice(0, 2).join(' ')).toLowerCase();
+  const num1 = extractHouseNumber(parts1.slice(2).join(' ') || a1);
+  const num2 = extractHouseNumber(parts2.slice(2).join(' ') || a2);
+
+  return blok1 === blok2 && num1 !== null && num1 === num2;
+}
+
+function findWargaByAddress(blok, no) {
+  const targetBlok = normalizeBlok(blok).toLowerCase();
+  const targetNum = extractHouseNumber(no);
+  if (!targetBlok || targetNum === null) return null;
+
+  return db.warga.find(w => {
+    if (!w.noRumah) return false;
+    const parts = w.noRumah.trim().split(/\s+/);
+    const wBlok = normalizeBlok(parts.slice(0, 2).join(' ')).toLowerCase();
+    const wNum = extractHouseNumber(parts.slice(2).join(' ') || w.noRumah);
+    return wBlok === targetBlok && wNum === targetNum;
+  });
+}
+
+function getRegisteredWargaInBlok(blok) {
+  const targetBlok = normalizeBlok(blok).toLowerCase();
+  if (!targetBlok) return [];
+
+  return db.warga.filter(w => {
+    if (!w.noRumah) return false;
+    const parts = w.noRumah.trim().split(/\s+/);
+    const wBlok = normalizeBlok(parts.slice(0, 2).join(' ')).toLowerCase();
+    return wBlok === targetBlok;
+  });
+}
+
+function getFirstAvailableHouseNumber(blok) {
+  for (let i = 1; i <= 70; i++) {
+    if (!findWargaByAddress(blok, i)) {
+      return `No. ${i}`;
+    }
+  }
+  return 'No. 1';
+}
+
+function renderSensusNoRumahOptionsHtml(blok, selectedNo) {
+  const selectedNum = extractHouseNumber(selectedNo);
+  const list = [];
+  for (let i = 1; i <= 70; i++) {
+    const val = `No. ${i}`;
+    const w = findWargaByAddress(blok, i);
+    const isSel = selectedNum === i;
+    if (w) {
+      list.push(`<option value="${val}" ${isSel ? 'selected' : ''} class="bg-rose-100 text-rose-800 font-bold" style="background-color:#fee2e2; color:#b91c1c; font-weight:bold;">⛔ No. ${i} [TERDAFTAR: ${w.nama}]</option>`);
+    } else {
+      list.push(`<option value="${val}" ${isSel ? 'selected' : ''}>No. ${i} (Tersedia)</option>`);
+    }
+  }
+  return list.join('');
+}
+
+function renderSensusGridRumahHtml(blok, selectedNo) {
+  const selectedNum = extractHouseNumber(selectedNo);
+  const tiles = [];
+  for (let i = 1; i <= 70; i++) {
+    const w = findWargaByAddress(blok, i);
+    const isSel = selectedNum === i;
+
+    if (w) {
+      tiles.push(`
+        <button type="button" onclick="selectSensusHouseFromGrid(${i})" title="No. ${i}: Terdaftar a.n. ${w.nama} (${w.status})" class="p-1.5 rounded-xl text-center text-[10.5px] font-black transition shadow-2xs border ${isSel ? 'bg-rose-600 ring-2 ring-amber-400 text-white scale-105 z-10' : 'bg-rose-500 hover:bg-rose-600 text-white border-rose-600 ring-1 ring-rose-300'} flex flex-col items-center justify-center min-h-[38px] cursor-pointer">
+          <span class="leading-none">${i}</span>
+          <span class="text-[8px] font-black text-rose-100 uppercase mt-0.5">Terisi</span>
+        </button>
+      `);
+    } else {
+      if (isSel) {
+        tiles.push(`
+          <button type="button" onclick="selectSensusHouseFromGrid(${i})" title="No. ${i}: Tersedia (Sedang Dipilih)" class="p-1.5 rounded-xl text-center text-[10.5px] font-black transition shadow-2xs border bg-amber-500 text-white border-amber-600 ring-2 ring-amber-400 scale-105 z-10 flex flex-col items-center justify-center min-h-[38px] cursor-pointer">
+            <span class="leading-none">${i}</span>
+            <span class="text-[8px] font-black text-amber-100 uppercase mt-0.5">Pilih</span>
+          </button>
+        `);
+      } else {
+        tiles.push(`
+          <button type="button" onclick="selectSensusHouseFromGrid(${i})" title="No. ${i}: Tersedia untuk pendaftaran baru" class="p-1.5 rounded-xl text-center text-[10.5px] font-semibold transition shadow-2xs border bg-white hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 text-slate-700 border-slate-200/90 flex flex-col items-center justify-center min-h-[38px] active:scale-95 cursor-pointer">
+            <span class="leading-none">${i}</span>
+            <span class="text-[8px] font-medium text-slate-400 mt-0.5">Siap</span>
+          </button>
+        `);
+      }
+    }
+  }
+  return tiles.join('');
+}
+
+function renderSensusRegisteredChipsHtml(blok) {
+  const registered = getRegisteredWargaInBlok(blok);
+  if (registered.length === 0) {
+    return `
+      <div class="w-full text-center py-2 text-[11px] text-slate-400 font-medium bg-white/70 rounded-xl border border-dashed border-slate-200">
+        Belum ada nomor rumah yang terdaftar di blok ini. Semua nomor (1-70) tersedia untuk didaftarkan.
+      </div>
+    `;
+  }
+  return registered.map(w => `
+    <button type="button" onclick="selectSensusHouseFromGrid(${extractHouseNumber(w.noRumah)})" title="Klik untuk cek nomor ini" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-[11px] font-bold shadow-2xs transition active:scale-95">
+      <i class="ph-bold ph-house-line text-rose-600 text-xs"></i>
+      <span>${w.noRumah}</span>
+      <span class="text-rose-300 font-normal">•</span>
+      <span class="text-rose-950 font-black truncate max-w-[150px]">${w.nama}</span>
+      <span class="px-1.5 py-0.2 bg-rose-200/80 text-rose-900 rounded text-[9px] uppercase">${w.status}</span>
+    </button>
+  `).join('');
+}
+
+function renderSensusRumahStatusHtml(blok, noStr) {
+  const w = findWargaByAddress(blok, noStr);
+  const num = extractHouseNumber(noStr) || 1;
+  const alamatLengkap = `${blok} No. ${num}`;
+
+  if (w) {
+    return `
+      <div class="p-3.5 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-900 text-xs flex items-start justify-between gap-3 shadow-xs">
+        <div class="flex items-start gap-2.5">
+          <div class="w-7 h-7 rounded-xl bg-rose-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5 text-base shadow-xs">
+            <i class="ph-bold ph-warning-octagon"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <p class="text-xs font-black text-rose-950 uppercase tracking-wide">Nomor Rumah Sudah Digunakan (Input Data Ditolak)</p>
+              <span class="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-200 text-rose-800">Tertolak</span>
+            </div>
+            <p class="text-[11px] text-rose-800 mt-1 leading-relaxed">
+              Alamat <b>${alamatLengkap}</b> telah terdaftar dalam sistem atas nama KK <b>${w.nama}</b> (${w.status}, ${w.anggota || 1} Jiwa). 
+              Satu nomor rumah hanya dapat didaftarkan satu kali. Silakan pilih nomor rumah lain yang tersedia.
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 text-xs flex items-start justify-between gap-3 shadow-xs">
+      <div class="flex items-start gap-2.5">
+        <div class="w-7 h-7 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5 text-base shadow-xs">
+          <i class="ph-bold ph-check"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <p class="text-xs font-black text-emerald-950 uppercase tracking-wide">Nomor Rumah Tersedia</p>
+            <span class="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-200 text-emerald-800">Bisa Didaftarkan</span>
+          </div>
+          <p class="text-[11px] text-emerald-800 mt-1 leading-relaxed">
+            Alamat <b>${alamatLengkap}</b> belum digunakan dan siap didaftarkan.
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function onSensusBlokChange() {
+  const blok = document.getElementById('sensusBlok').value;
+  const noSelect = document.getElementById('sensusNoRumah');
+  const currentNo = noSelect.value || getFirstAvailableHouseNumber(blok);
+
+  noSelect.innerHTML = renderSensusNoRumahOptionsHtml(blok, currentNo);
+  updateSensusUI();
+}
+
+function onSensusNoRumahChange() {
+  updateSensusUI();
+}
+
+function selectSensusHouseFromGrid(num) {
+  const blokEl = document.getElementById('sensusBlok');
+  const noSelect = document.getElementById('sensusNoRumah');
+  if (!blokEl || !noSelect) return;
+
+  const blok = blokEl.value;
+  const targetVal = `No. ${num}`;
+
+  noSelect.value = targetVal;
+  updateSensusUI();
+
+  const w = findWargaByAddress(blok, targetVal);
+  if (w) {
+    showToast(`Perhatian: Nomor rumah ${blok} ${targetVal} sudah digunakan oleh ${w.nama}!`, 'warning');
+  } else {
+    showToast(`Nomor rumah ${blok} ${targetVal} dipilih dan siap didaftarkan.`, 'info');
+  }
+}
+
+function updateSensusUI() {
+  const blokEl = document.getElementById('sensusBlok');
+  const noEl = document.getElementById('sensusNoRumah');
+  if (!blokEl || !noEl) return;
+
+  const blok = blokEl.value;
+  const no = noEl.value;
+  const registered = getRegisteredWargaInBlok(blok);
+  const countTerdaftar = registered.length;
+  const countTersedia = 70 - countTerdaftar;
+
+  const blokLabel = document.getElementById('sensusPetaBlokLabel');
+  if (blokLabel) blokLabel.textContent = blok;
+
+  const cTerdaftarEl = document.getElementById('sensusCountTerdaftar');
+  if (cTerdaftarEl) cTerdaftarEl.textContent = countTerdaftar;
+
+  const cTersediaEl = document.getElementById('sensusCountTersedia');
+  if (cTersediaEl) cTersediaEl.textContent = countTersedia;
+
+  const statusContainer = document.getElementById('sensusRumahStatusContainer');
+  if (statusContainer) statusContainer.innerHTML = renderSensusRumahStatusHtml(blok, no);
+
+  const chipsContainer = document.getElementById('sensusDaftarRumahTerdaftar');
+  if (chipsContainer) chipsContainer.innerHTML = renderSensusRegisteredChipsHtml(blok);
+
+  const gridContainer = document.getElementById('sensusGridNomorRumah');
+  if (gridContainer) gridContainer.innerHTML = renderSensusGridRumahHtml(blok, no);
 }
 
 function getFilteredWargaList() {
@@ -2875,7 +4652,7 @@ function renderWargaCardsHtml(filteredList) {
             <button onclick="openModalKartuDigital('${w.id}')" title="Kartu Identitas Digital" class="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl transition shadow-2xs">
               <i class="ph-bold ph-identification-card text-base"></i>
             </button>
-            <button onclick="openModalKartuIuran('${w.nama.replace(/'/g, "\\'")}')" title="Kartu Iuran" class="p-2 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-xl transition shadow-2xs">
+            <button onclick="openModalKartuIuran('${w.id}')" title="Kartu Iuran" class="p-2 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-xl transition shadow-2xs">
               <i class="ph-bold ph-receipt text-base"></i>
             </button>
             ${isPengurus() ? `
@@ -3030,7 +4807,6 @@ function renderWarga() {
                 <option value="Ciskul 8" ${wargaFilterBlok === 'Ciskul 8' ? 'selected' : ''}>Blok Ciskul 8</option>
                 <option value="Ciskul 9" ${wargaFilterBlok === 'Ciskul 9' ? 'selected' : ''}>Blok Ciskul 9</option>
                 <option value="Ciskul 10" ${wargaFilterBlok === 'Ciskul 10' ? 'selected' : ''}>Blok Ciskul 10</option>
-                <option value="Gemani" ${wargaFilterBlok === 'Gemani' ? 'selected' : ''}>Blok Gemani</option>
               </select>
             </div>
           </div>
@@ -3070,50 +4846,94 @@ function renderWarga() {
             </div>
           </div>
         </div>
-      ` : `
-        <!-- Formulir e-Sensus Mandiri dengan Validasi Anti-Duplikasi Nomor Rumah -->
+      ` : (() => {
+        const initialBlok = 'Ciskul 9';
+        const initialNo = getFirstAvailableHouseNumber(initialBlok);
+        return `
+        <!-- Formulir e-Sensus Mandiri dengan Validasi Pembeda Nomor Rumah & Anti-Duplikasi Rumah -->
         <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
           <div>
-            <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 uppercase">Pemutakhiran Data Warga</span>
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 uppercase">Pemutakhiran Data Warga</span>
+              <span class="text-[10.5px] font-bold text-slate-500">Pembeda Utama: <b class="text-amber-800">Nomor Rumah (Unik)</b></span>
+            </div>
             <h3 class="text-sm font-black text-slate-900 mt-1">e-Sensus Mandiri & Data KK RT 04</h3>
-            <p class="text-[11px] text-slate-500 mt-0.5">Isi formulir berikut untuk mendaftarkan Kepala Keluarga baru atau memperbarui data KK Anda. Nama KK yang sama diperbolehkan karena pembedanya adalah nomor rumah.</p>
+            <p class="text-[11px] text-slate-500 mt-0.5">Daftarkan Kepala Keluarga baru atau perbarui data KK Anda. Nama KK yang sama diperbolehkan jika nomor rumah berbeda. Jika nomor rumah telah terdaftar, sistem akan menolak pendaftaran.</p>
           </div>
 
-          <form onsubmit="handleSensusSubmit(event)" class="space-y-3.5 text-left">
+          <form onsubmit="handleSensusSubmit(event)" class="space-y-4 text-left">
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Nama Kepala Keluarga (KK)</label>
                 <input type="text" id="sensusNama" required placeholder="Nama lengkap KK" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
-                <p class="text-[10px] text-slate-400 mt-1 font-medium">Boleh sama dengan warga lain (pembeda: nomor rumah).</p>
+                <p class="text-[10px] text-slate-400 mt-1">Nama sama bisa diinput, pembedanya adalah nomor rumah.</p>
               </div>
               <div>
                 <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Pilihan Blok / Jalan</label>
-                <select id="sensusBlok" onchange="handleSensusBlokChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <select id="sensusBlok" onchange="onSensusBlokChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
                   <option value="Ciskul I">Ciskul I</option>
                   <option value="Ciskul 6">Ciskul 6</option>
                   <option value="Ciskul 7">Ciskul 7</option>
                   <option value="Ciskul 8">Ciskul 8</option>
                   <option value="Ciskul 9" selected>Ciskul 9</option>
                   <option value="Ciskul 10">Ciskul 10</option>
-                  <option value="Gemani">Gemani</option>
                 </select>
               </div>
               <div>
                 <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Nomor Rumah (1-70)</label>
-                <select id="sensusNoRumah" onchange="handleSensusNoRumahChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
-                  ${getSensusNoRumahOptionsHtml('Ciskul 9', 'No. 1')}
+                <select id="sensusNoRumah" onchange="onSensusNoRumahChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
+                  ${renderSensusNoRumahOptionsHtml(initialBlok, initialNo)}
                 </select>
               </div>
             </div>
 
-            <!-- Banner Status Ketersediaan Nomor Rumah -->
-            <div id="sensusStatusBanner">
-              ${getSensusStatusBannerHtml('Ciskul 9', 'No. 1')}
+            <!-- Banner Highlight Status Ketersediaan Nomor Rumah -->
+            <div id="sensusRumahStatusContainer">
+              ${renderSensusRumahStatusHtml(initialBlok, initialNo)}
             </div>
 
-            <!-- Panel Highlight Nomor Rumah Terdaftar di Blok Terpilih -->
-            <div id="sensusHighlightContainer" class="p-3.5 bg-slate-50/90 rounded-2xl border border-slate-200">
-              ${getSensusHighlightPanelHtml('Ciskul 9')}
+            <!-- Panel Visual Highlight Peta Nomor Rumah Blok (1-70) -->
+            <div class="p-4 bg-slate-50/90 border border-slate-200/90 rounded-2xl space-y-3">
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h4 class="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                    <i class="ph-bold ph-buildings text-amber-600"></i>
+                    <span>Peta & Ketersediaan Nomor Rumah (<span id="sensusPetaBlokLabel">${initialBlok}</span>)</span>
+                  </h4>
+                  <p class="text-[10.5px] text-slate-500 mt-0.5">Nomor rumah yang sudah didaftarkan ditandai warna <b class="text-rose-600">Merah (Terisi)</b>. Klik nomor untuk memilih langsung.</p>
+                </div>
+                <!-- Legend -->
+                <div class="flex items-center gap-1.5 text-[10px] font-bold flex-wrap">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300">
+                    <span class="w-2 h-2 rounded-full bg-rose-600"></span>
+                    <span>Terdaftar (<span id="sensusCountTerdaftar">${getRegisteredWargaInBlok(initialBlok).length}</span>)</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white text-slate-700 border border-slate-200">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>Tersedia (<span id="sensusCountTersedia">${70 - getRegisteredWargaInBlok(initialBlok).length}</span>)</span>
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300">
+                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span>Pilihan Anda</span>
+                  </span>
+                </div>
+              </div>
+
+              <!-- List Chips Nomor Rumah Terdaftar di Blok ini -->
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Daftar Rumah yang Sudah Terdaftar di Blok Ini:</span>
+                <div id="sensusDaftarRumahTerdaftar" class="flex flex-wrap gap-1.5">
+                  ${renderSensusRegisteredChipsHtml(initialBlok)}
+                </div>
+              </div>
+
+              <!-- Grid 70 Nomor Rumah -->
+              <div class="pt-2 border-t border-slate-200/80">
+                <span class="text-[10px] uppercase font-bold text-slate-400 block mb-1.5">Pilih Cepat Nomor Rumah (1-70):</span>
+                <div id="sensusGridNomorRumah" class="grid grid-cols-7 sm:grid-cols-10 md:grid-cols-14 gap-1.5 max-h-48 overflow-y-auto p-1 bg-white rounded-xl border border-slate-200/70">
+                  ${renderSensusGridRumahHtml(initialBlok, initialNo)}
+                </div>
+              </div>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -3164,7 +4984,8 @@ function renderWarga() {
             </div>
           </form>
         </div>
-      `}
+        `;
+      })()}
     </div>
   `;
 }
@@ -3184,16 +5005,19 @@ function handleSensusSubmit(e) {
   const jiwaEl = document.getElementById('sensusJiwa');
   const jiwa = jiwaEl ? (Number(jiwaEl.value) || 1) : 1;
 
-  // Catatan: Nama KK yang sama DIPERBOLEHKAN karena pembedanya adalah nomor rumah.
-  // Validasi Anti Duplikasi Nomor Rumah (1 Nomor Rumah = 1 KK)
-  const rumahSudahAda = findWargaByNoRumah(noRumah);
+  // 1. Validasi Nomor Rumah (MUTLAK: Jika sudah digunakan, input data tertolak)
+  const rumahSudahAda = findWargaByAddress(blok, no) || db.warga.find(w => isSameNoRumah(w.noRumah, noRumah));
   if (rumahSudahAda) {
-    showToast(`Input Ditolak: Nomor rumah "${noRumah}" telah digunakan (terdaftar atas nama KK ${rumahSudahAda.nama})!`, 'error');
-    handleSensusNoRumahChange();
-    const bannerEl = document.getElementById('sensusStatusBanner');
-    if (bannerEl) bannerEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showToast(`Input Ditolak: Nomor rumah "${noRumah}" telah digunakan atas nama KK ${rumahSudahAda.nama}!`, 'error');
+    updateSensusUI();
+    const statusEl = document.getElementById('sensusRumahStatusContainer');
+    if (statusEl) statusEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
+
+  // 2. Nama KK yang sama DIPERBOLEHKAN (karena pembedanya nomor rumah)
+  const namaSamaWarga = db.warga.filter(w => w.nama.toLowerCase().trim() === nama.toLowerCase());
+  const adaNamaSama = namaSamaWarga.length > 0;
 
   const hubList = document.querySelectorAll('select[name="hubAnggota[]"]');
   const namaList = document.querySelectorAll('input[name="namaAnggota[]"]');
@@ -3245,8 +5069,13 @@ function handleSensusSubmit(e) {
   });
 
   triggerConfetti();
-  showToast(`Data e-Sensus & KK ${nama} berhasil disimpan!`);
-  logEvent('WARGA', `Pendaftaran e-Sensus KK baru: ${newWarga.nama} (${newWarga.noRumah}) - ${newWarga.anggota} Jiwa`, 'success');
+  if (adaNamaSama) {
+    showToast(`Data e-Sensus KK "${nama}" berhasil didaftarkan di alamat pembeda ${noRumah}!`);
+    logEvent('WARGA', `Pendaftaran e-Sensus KK baru (Nama sama, pembeda no rumah): ${newWarga.nama} (${newWarga.noRumah}) - ${newWarga.anggota} Jiwa`, 'info');
+  } else {
+    showToast(`Data e-Sensus & KK ${nama} berhasil disimpan!`);
+    logEvent('WARGA', `Pendaftaran e-Sensus KK baru: ${newWarga.nama} (${newWarga.noRumah}) - ${newWarga.anggota} Jiwa`, 'success');
+  }
   subTabWarga = 'direktori';
   renderApp();
 }
@@ -3290,11 +5119,29 @@ function konfirmasiHapusWarga(id) {
   renderApp();
 }
 
-function handleEditWargaBlokChange(excludeId) {
+function renderEditWargaNoOptionsHtml(blok, currentNo, currentWargaId) {
+  const currentNum = extractHouseNumber(currentNo);
+  const options = [];
+  for (let i = 1; i <= 70; i++) {
+    const numStr = `No. ${i}`;
+    const otherW = db.warga.find(x => x.id !== currentWargaId && isSameNoRumah(x.noRumah, `${blok} ${numStr}`));
+    const isSel = currentNum === i;
+    if (otherW) {
+      options.push(`<option value="${numStr}" ${isSel ? 'selected' : ''} class="bg-rose-100 text-rose-800 font-bold" style="background-color:#fee2e2; color:#b91c1c; font-weight:bold;">⛔ ${numStr} [TERPAKAI: ${otherW.nama}]</option>`);
+    } else if (isSel) {
+      options.push(`<option value="${numStr}" selected class="bg-amber-100 font-bold">${numStr} (Rumah KK Saat Ini)</option>`);
+    } else {
+      options.push(`<option value="${numStr}">${numStr} (Tersedia)</option>`);
+    }
+  }
+  return options.join('');
+}
+
+function onEditWargaBlokChange(currentWargaId) {
   const blokEl = document.getElementById('editWargaBlok');
   const noEl = document.getElementById('editWargaNo');
   if (!blokEl || !noEl) return;
-  noEl.innerHTML = getSensusNoRumahOptionsHtml(blokEl.value, noEl.value, excludeId);
+  noEl.innerHTML = renderEditWargaNoOptionsHtml(blokEl.value, noEl.value, currentWargaId);
 }
 
 // Modal Edit Data Warga
@@ -3306,19 +5153,10 @@ function openModalEditWarga(id) {
   const w = db.warga.find(x => x.id === id);
   if (!w) return;
 
-  let currentBlok = 'Ciskul 9';
-  let currentNo = 'No. 1';
-  if (w.noRumah) {
-    if (w.noRumah.startsWith('Gemani')) {
-      currentBlok = 'Gemani';
-      currentNo = w.noRumah.replace('Gemani', '').trim();
-    } else {
-      const splitAlamat = w.noRumah.split(' ');
-      currentBlok = splitAlamat[0] && splitAlamat[1] ? `${splitAlamat[0]} ${splitAlamat[1]}` : 'Ciskul 9';
-      if (currentBlok === 'Ciskul 1') currentBlok = 'Ciskul I';
-      currentNo = splitAlamat.slice(2).join(' ') || 'No. 1';
-    }
-  }
+  const splitAlamat = (w.noRumah || '').split(' ');
+  let currentBlok = splitAlamat[0] && splitAlamat[1] ? `${splitAlamat[0]} ${splitAlamat[1]}` : 'Ciskul 9';
+  if (currentBlok === 'Ciskul 1') currentBlok = 'Ciskul I';
+  const currentNo = splitAlamat.slice(2).join(' ') || 'No. 1';
 
   const html = `
     <div class="space-y-4 text-left">
@@ -3336,26 +5174,25 @@ function openModalEditWarga(id) {
         <div>
           <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Nama Kepala Keluarga (KK)</label>
           <input type="text" id="editWargaNama" required value="${w.nama}" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
-          <p class="text-[10px] text-slate-400 mt-1">Nama boleh sama dengan warga lain (pembeda: nomor rumah).</p>
+          <p class="text-[10px] text-slate-400 mt-1">Nama sama diperbolehkan selama nomor rumah berbeda.</p>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Pilihan Blok / Jalan</label>
-            <select id="editWargaBlok" onchange="handleEditWargaBlokChange('${w.id}')" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
+            <select id="editWargaBlok" onchange="onEditWargaBlokChange('${w.id}')" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
               <option value="Ciskul I" ${currentBlok === 'Ciskul I' ? 'selected' : ''}>Ciskul I</option>
               <option value="Ciskul 6" ${currentBlok === 'Ciskul 6' ? 'selected' : ''}>Ciskul 6</option>
               <option value="Ciskul 7" ${currentBlok === 'Ciskul 7' ? 'selected' : ''}>Ciskul 7</option>
               <option value="Ciskul 8" ${currentBlok === 'Ciskul 8' ? 'selected' : ''}>Ciskul 8</option>
               <option value="Ciskul 9" ${currentBlok === 'Ciskul 9' ? 'selected' : ''}>Ciskul 9</option>
               <option value="Ciskul 10" ${currentBlok === 'Ciskul 10' ? 'selected' : ''}>Ciskul 10</option>
-              <option value="Gemani" ${currentBlok === 'Gemani' ? 'selected' : ''}>Gemani</option>
             </select>
           </div>
           <div>
             <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Nomor Rumah (1-70)</label>
             <select id="editWargaNo" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500">
-              ${getSensusNoRumahOptionsHtml(currentBlok, currentNo, w.id)}
+              ${renderEditWargaNoOptionsHtml(currentBlok, currentNo, w.id)}
             </select>
           </div>
         </div>
@@ -3429,11 +5266,10 @@ function handleEditWargaSubmit(e, id) {
   const anak = w.anak || '-';
   const ortu = w.ortu || '-';
 
-  // Catatan: Nama KK yang sama diperbolehkan karena pembeda uniknya adalah nomor rumah.
-  // Validasi Anti Duplikasi Nomor Rumah:
-  const rumahSudahAda = findWargaByNoRumah(noRumahBaru, id);
+  // Validasi bentrok nomor rumah (nama sama diperbolehkan, pembeda nomor rumah)
+  const rumahSudahAda = db.warga.find(x => x.id !== id && isSameNoRumah(x.noRumah, noRumahBaru));
   if (rumahSudahAda) {
-    showToast(`Koreksi Ditolak: Nomor rumah "${noRumahBaru}" telah digunakan (terdaftar atas nama KK ${rumahSudahAda.nama})!`, 'error');
+    showToast(`Koreksi Ditolak: Alamat "${noRumahBaru}" sudah terdaftar atas nama KK ${rumahSudahAda.nama}!`, 'error');
     return;
   }
 
@@ -4061,20 +5897,23 @@ function renderAdminConfig() {
         </div>
       </div>
 
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5 bg-slate-200/70 p-1.5 rounded-2xl">
-        <button onclick="adminSubTab = 'pengurus'; renderApp();" class="py-2 px-1.5 rounded-xl text-xs font-bold transition ${adminSubTab === 'pengurus' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5 bg-slate-200/70 p-1.5 rounded-2xl">
+        <button onclick="adminSubTab = 'pengurus'; renderApp();" class="py-2 px-1.5 rounded-xl text-xs font-bold transition ${adminSubTab === 'pengurus' ? 'bg-white text-slate-900 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'}">
           👥 Pengurus
         </button>
-        <button onclick="adminSubTab = 'keuangan'; renderApp();" class="py-2 px-1.5 rounded-xl text-xs font-bold transition ${adminSubTab === 'keuangan' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+        <button onclick="adminSubTab = 'keuangan'; renderApp();" class="py-2 px-1.5 rounded-xl text-xs font-bold transition ${adminSubTab === 'keuangan' ? 'bg-white text-slate-900 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'}">
           💰 Iuran & Kas
         </button>
-        <button onclick="adminSubTab = 'surat'; renderApp();" class="py-2 px-1.5 rounded-xl text-xs font-bold transition ${adminSubTab === 'surat' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+        <button onclick="adminSubTab = 'gateway'; renderApp();" class="py-2 px-1.5 rounded-xl text-xs font-bold transition ${adminSubTab === 'gateway' ? 'bg-emerald-600 text-white shadow-xs font-black' : 'text-emerald-800 hover:text-emerald-950 bg-emerald-50/70 font-bold'}">
+          💳 Gateway Pay
+        </button>
+        <button onclick="adminSubTab = 'surat'; renderApp();" class="py-2 px-1.5 rounded-xl text-xs font-bold transition ${adminSubTab === 'surat' ? 'bg-white text-slate-900 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'}">
           📜 Surat & TTD
         </button>
-        <button onclick="adminSubTab = 'sistem'; renderApp();" class="py-2 px-1.5 rounded-xl text-xs font-bold transition ${adminSubTab === 'sistem' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+        <button onclick="adminSubTab = 'sistem'; renderApp();" class="py-2 px-1.5 rounded-xl text-xs font-bold transition ${adminSubTab === 'sistem' ? 'bg-white text-slate-900 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'}">
           💾 Cadangan
         </button>
-        <button onclick="adminSubTab = 'log'; renderApp();" class="py-2 px-1.5 rounded-xl text-xs font-bold transition col-span-2 sm:col-span-1 ${adminSubTab === 'log' ? 'bg-rose-600 text-white shadow-xs' : 'text-rose-700 hover:text-rose-900 font-extrabold'}">
+        <button onclick="adminSubTab = 'log'; renderApp();" class="py-2 px-1.5 rounded-xl text-xs font-bold transition col-span-2 sm:col-span-1 ${adminSubTab === 'log' ? 'bg-rose-600 text-white shadow-xs font-black' : 'text-rose-700 hover:text-rose-900 font-extrabold'}">
           📋 Event Log
         </button>
       </div>
@@ -4121,6 +5960,110 @@ function renderAdminConfig() {
             <button type="submit" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow">
               Simpan Tarif Iuran
             </button>
+          </form>
+        </div>
+      ` : adminSubTab === 'gateway' ? `
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div>
+              <h3 class="text-xs font-black text-slate-900 uppercase font-display">Konfigurasi Self-Hosted Payment Gateway RT 04</h3>
+              <p class="text-[11px] text-slate-500">Atur rekening kas RT, nama bank, QRIS resmi RT, dan nomor WhatsApp konfirmasi bendahara</p>
+            </div>
+            <span class="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+              Gateway Aktif
+            </span>
+          </div>
+
+          <form onsubmit="handleSimpanConfigGateway(event)" class="space-y-4">
+            <!-- Bagian 1: Rekening Kas RT -->
+            <div class="p-4 bg-sky-50/50 rounded-2xl border border-sky-200 space-y-3">
+              <span class="text-[10px] font-black uppercase text-sky-900 tracking-wider flex items-center gap-1.5 font-bold">
+                <i class="ph-bold ph-bank"></i>
+                Rekening Kas Resmi RT 04 (Transfer Bank)
+              </span>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Nama Bank Kas RT</label>
+                  <input type="text" id="configPgBank" required value="${appConfig.pgNamaBank || 'Bank Mandiri'}" placeholder="Contoh: Bank Mandiri / BCA / BSI / BJB" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Nomor Rekening RT</label>
+                  <input type="text" id="configPgRekening" required value="${appConfig.pgNoRekening || '131-00-140414-9'}" placeholder="Nomor rekening kas RT" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold">
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Atas Nama Rekening Kas RT</label>
+                <input type="text" id="configPgAtasNama" required value="${appConfig.pgAtasNama || 'KAS RT 04 CISKUL / H. AHMAD SOBARI'}" placeholder="Nama pemilik / pemegang rekening kas RT" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold">
+              </div>
+            </div>
+
+            <!-- Bagian 2: QRIS RT 04 -->
+            <div class="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-200 space-y-3">
+              <span class="text-[10px] font-black uppercase text-emerald-900 tracking-wider flex items-center gap-1.5 font-bold">
+                <i class="ph-bold ph-qr-code"></i>
+                QRIS Nasional RT 04 (Semua m-Banking & e-Wallet)
+              </span>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Nama Merchant QRIS RT</label>
+                  <input type="text" id="configPgMerchant" required value="${appConfig.pgQrisMerchant || 'RT 04 RW 14 CISARANTEN KULON'}" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">NMID QRIS</label>
+                  <input type="text" id="configPgNmid" required value="${appConfig.pgQrisNmid || 'ID102604140001'}" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-semibold">
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Gambar QRIS Khusus RT (Opsional)</label>
+                <div class="flex items-center space-x-3 flex-wrap gap-y-2">
+                  ${appConfig.pgQrisImg ? `
+                    <img src="${appConfig.pgQrisImg}" alt="QRIS Custom" class="w-14 h-14 rounded-xl object-contain border border-emerald-300 bg-white p-1">
+                    <div>
+                      <p class="text-xs font-bold text-emerald-900">Gambar QRIS Kustom Aktif</p>
+                      <button type="button" onclick="resetQrisImageAdmin()" class="text-[11px] text-rose-600 hover:underline font-bold">Gunakan Generator Dinamis Bawaan</button>
+                    </div>
+                  ` : `
+                    <label class="px-3 py-2 bg-white hover:bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5 shadow-2xs">
+                      <i class="ph-bold ph-upload-simple"></i>
+                      <span>Unggah Gambar QRIS Resmi RT</span>
+                      <input type="file" accept="image/*" onchange="handleUploadQrisAdmin(event)" class="hidden">
+                    </label>
+                    <span class="text-[11px] text-slate-400">Jika kosong, sistem akan merender QRIS dinamis berstandar nasional secara otomatis.</span>
+                  `}
+                </div>
+              </div>
+            </div>
+
+            <!-- Bagian 3: WhatsApp Konfirmasi & Fitur Kode Unik -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Nomor WhatsApp Penerima Bukti Bayar</label>
+                <input type="text" id="configPgWa" required value="${appConfig.pgWaKonfirmasi || '6281234567891'}" placeholder="62812xxxx" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold">
+                <span class="text-[10px] text-slate-400 mt-0.5 block">Format: 628xxxx (Nomor WhatsApp Bendahara RT)</span>
+              </div>
+              <div class="flex items-center pt-5">
+                <label class="flex items-center space-x-2 cursor-pointer select-none">
+                  <input type="checkbox" id="configPgKodeUnik" ${appConfig.pgGunakanKodeUnik !== false ? 'checked' : ''} class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500">
+                  <span class="text-xs font-bold text-slate-700">Gunakan 3-Digit Kode Unik Otomatis (Rekomendasi)</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Petunjuk Pembayaran untuk Warga</label>
+              <textarea id="configPgPetunjuk" rows="2" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold">${appConfig.pgPetunjuk || 'Mohon transfer nominal tepat beserta 3 digit kode unik agar verifikasi pembayaran dapat dicocokkan otomatis & instan.'}</textarea>
+            </div>
+
+            <div class="pt-2">
+              <button type="submit" class="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2 active:scale-95">
+                <i class="ph-bold ph-floppy-disk text-sm"></i>
+                <span>Simpan Konfigurasi Payment Gateway</span>
+              </button>
+            </div>
           </form>
         </div>
       ` : adminSubTab === 'surat' ? `
@@ -4935,7 +6878,7 @@ function initBerandaKependudukanCharts() {
   const canvasBlok = document.getElementById('chartBerandaDistribusiBlok');
   const canvasDemografi = document.getElementById('chartBerandaDemografi');
 
-  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
+  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10'];
   const blokCounts = blokNames.map(b => db.warga.filter(w => w.noRumah && (w.noRumah.includes(b) || (b === 'Ciskul I' && /\bCiskul 1\b/i.test(w.noRumah)))).length);
   const tetap = db.warga.filter(w => w.status === 'Tetap').length;
   const kontrak = db.warga.filter(w => w.status === 'Kontrak').length;
@@ -4945,7 +6888,7 @@ function initBerandaKependudukanCharts() {
     berandaDistribusiBlokChartInstance = new Chart(canvasBlok, {
       type: 'bar',
       data: {
-        labels: ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'],
+        labels: ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10'],
         datasets: [{
           label: 'Jumlah KK',
           data: blokCounts,
@@ -4955,8 +6898,7 @@ function initBerandaKependudukanCharts() {
             '#6366f1', // Ciskul 7: Indigo
             '#8b5cf6', // Ciskul 8: Purple
             '#10b981', // Ciskul 9: Emerald
-            '#f59e0b', // Ciskul 10: Amber
-            '#ec4899'  // Gemani: Pink / Rose
+            '#f59e0b'  // Ciskul 10: Amber
           ],
           hoverBackgroundColor: [
             '#0891b2',
@@ -4964,8 +6906,7 @@ function initBerandaKependudukanCharts() {
             '#4f46e5',
             '#7c3aed',
             '#059669',
-            '#d97706',
-            '#db2777'
+            '#d97706'
           ],
           borderRadius: 8,
           borderSkipped: false
@@ -5219,7 +7160,7 @@ function initBlokChart() {
   if (!canvas || typeof Chart === 'undefined') return;
   if (blokChartInstance) blokChartInstance.destroy();
 
-  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
+  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10'];
   const blokCounts = blokNames.map(b => db.warga.filter(w => w.noRumah && (w.noRumah.includes(b) || (b === 'Ciskul I' && /\bCiskul 1\b/i.test(w.noRumah)))).length);
 
   blokChartInstance = new Chart(canvas, {

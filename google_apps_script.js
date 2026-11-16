@@ -27,7 +27,8 @@ function setupAwal() {
     { name: 'Surat', headers: ['ID', 'Nama', 'NIK', 'Alamat', 'Jenis', 'Keperluan', 'Status', 'Tanggal'] },
     { name: 'Aspirasi', headers: ['ID', 'Pelapor', 'Pesan', 'Status', 'Tanggal', 'Respon'] },
     { name: 'Config', headers: ['Key', 'Value'] },
-    { name: 'Logs', headers: ['ID', 'Waktu', 'User', 'Role', 'Kategori', 'Pesan', 'Tipe'] }
+    { name: 'Logs', headers: ['ID', 'Waktu', 'User', 'Role', 'Kategori', 'Pesan', 'Tipe'] },
+    { name: 'Pembayaran', headers: ['ID', 'WargaID', 'Nama', 'NoRumah', 'BulanList', 'NominalIuran', 'KodeUnik', 'TotalBayar', 'Metode', 'Status', 'TglTransaksi', 'TglVerifikasi', 'Verifikator', 'NamaPengirim', 'Catatan'] }
   ];
 
   sheets.forEach(def => {
@@ -58,6 +59,12 @@ function setupAwal() {
   configSheet.appendRow(['jabatanTtd', 'Ketua RT 04 / RW 14']);
   configSheet.appendRow(['namaBendahara', 'H. Ahmad Sobari']);
   configSheet.appendRow(['jabatanBendahara', 'Bendahara RT 04 / RW 14']);
+  configSheet.appendRow(['pgAktif', 'true']);
+  configSheet.appendRow(['pgNamaBank', 'Bank Mandiri']);
+  configSheet.appendRow(['pgNoRekening', '131-00-140414-9']);
+  configSheet.appendRow(['pgAtasNama', 'KAS RT 04 CISKUL / H. AHMAD SOBARI']);
+  configSheet.appendRow(['pgQrisMerchant', 'RT 04 RW 14 CISARANTEN KULON']);
+  configSheet.appendRow(['pgQrisNmid', 'ID102604140001']);
 
   return "Setup Berhasil! Semua tabel database RT 04 telah terpasang dengan rapi.";
 }
@@ -112,10 +119,21 @@ function doPost(e) {
       return createJsonResponse({ status: 'success', message: 'Transaksi kas tersimpan' });
     }
 
-    // 4. Tambah Warga
+    // 4. Tambah Warga (e-Sensus Mandiri / Input Pengurus)
     if (action === 'ADD_WARGA') {
       const sheet = ss.getSheetByName('Warga');
+      const rows = sheet.getDataRange().getValues();
       const w = body.data;
+
+      // Validasi nomor rumah: nama sama diperbolehkan (pembeda no rumah), no rumah sama ditolak
+      const targetNoRumah = String(w.noRumah || '').toLowerCase().trim();
+      for (let i = 1; i < rows.length; i++) {
+        const existNoRumah = String(rows[i][2] || '').toLowerCase().trim();
+        if (existNoRumah && existNoRumah === targetNoRumah) {
+          return createJsonResponse({ status: 'error', message: 'Nomor rumah ' + w.noRumah + ' telah digunakan atas nama KK ' + rows[i][1] });
+        }
+      }
+
       sheet.appendRow([w.id, w.nama, w.noRumah, w.jiwa, String(w.telp || ''), w.status, w.istri || '-', w.anak || '-', w.ortu || '-', w.agama || 'Islam', w.pekerjaan || '-']);
       return createJsonResponse({ status: 'success', message: 'Data warga tersimpan' });
     }
@@ -336,6 +354,51 @@ function doPost(e) {
       return createJsonResponse({ status: 'success', message: 'Konfigurasi berhasil disimpan' });
     }
 
+    // 17. Transaksi Pembayaran Mandiri (Self-Hosted Payment Gateway)
+    if (action === 'SUBMIT_PEMBAYARAN') {
+      const sheet = ss.getSheetByName('Pembayaran');
+      const p = body.data;
+      sheet.appendRow([
+        p.id, p.wargaId, p.namaWarga, p.noRumah,
+        Array.isArray(p.bulanList) ? p.bulanList.join(', ') : String(p.bulanList || ''),
+        Number(p.nominalIuran || 0), Number(p.kodeUnik || 0), Number(p.totalBayar || 0),
+        p.metode, p.status || 'Menunggu Verifikasi', p.tglTransaksi,
+        p.tglVerifikasi || '-', p.verifikator || '-', p.namaPengirim || '-', p.catatan || '-'
+      ]);
+      return createJsonResponse({ status: 'success', message: 'Transaksi pembayaran mandiri berhasil dicatat' });
+    }
+
+    // 18. Verifikasi Pembayaran Masuk
+    if (action === 'VERIFIKASI_PEMBAYARAN') {
+      const sheet = ss.getSheetByName('Pembayaran');
+      const rows = sheet.getDataRange().getValues();
+      const p = body.data;
+      for (let i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === String(p.id)) {
+          sheet.getRange(i + 1, 10).setValue('Lunas');
+          sheet.getRange(i + 1, 12).setValue(p.tglVerifikasi || new Date().toISOString().split('T')[0]);
+          sheet.getRange(i + 1, 13).setValue(p.verifikator || 'Pengurus RT');
+          return createJsonResponse({ status: 'success', message: 'Pembayaran berhasil diverifikasi' });
+        }
+      }
+      return createJsonResponse({ status: 'error', message: 'Data pembayaran tidak ditemukan' });
+    }
+
+    // 19. Tolak Pembayaran
+    if (action === 'TOLAK_PEMBAYARAN') {
+      const sheet = ss.getSheetByName('Pembayaran');
+      const rows = sheet.getDataRange().getValues();
+      const p = body.data;
+      for (let i = 1; i < rows.length; i++) {
+        if (String(rows[i][0]) === String(p.id)) {
+          sheet.getRange(i + 1, 10).setValue('Ditolak');
+          sheet.getRange(i + 1, 15).setValue(p.catatan || 'Ditolak oleh pengurus');
+          return createJsonResponse({ status: 'success', message: 'Pembayaran berhasil ditolak' });
+        }
+      }
+      return createJsonResponse({ status: 'error', message: 'Data pembayaran tidak ditemukan' });
+    }
+
     return createJsonResponse({ status: 'error', message: 'Aksi tidak dikenali' });
 
   } catch (err) {
@@ -349,7 +412,7 @@ function doGet(e) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const result = {};
-    const sheetNames = ['Users', 'Warga', 'Kas', 'Iuran', 'Agenda', 'Surat', 'Aspirasi', 'Config', 'Logs'];
+    const sheetNames = ['Users', 'Warga', 'Kas', 'Iuran', 'Agenda', 'Surat', 'Aspirasi', 'Config', 'Logs', 'Pembayaran'];
     const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
     sheetNames.forEach(name => {
