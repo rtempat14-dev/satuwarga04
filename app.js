@@ -57,6 +57,7 @@ let bayarMetode = 'qris'; // 'qris' | 'bank'
 let bayarKodeUnik = 0;
 let bayarUploadedBuktiBase64 = '';
 let bayarSearchFilter = '';
+let bayarHasSearched = false;
 let bayarRiwayatSearch = '';
 let bayarRiwayatFilterStatus = 'semua';
 
@@ -2763,11 +2764,21 @@ function getPendingMonthsForWarga(wargaNama) {
 }
 
 function selectBayarWarga(wargaId) {
+  if (!wargaId) {
+    bayarSelectedWargaId = '';
+    bayarSelectedBulan = [];
+    renderApp();
+    return;
+  }
   bayarSelectedWargaId = wargaId;
   const warga = db.warga.find(w => w.id === wargaId);
-  if (!warga) return;
+  if (!warga) {
+    bayarSelectedBulan = [];
+    renderApp();
+    return;
+  }
 
-  const unpaid = getUnpaidMonthsForWarga(warga.nama);
+  const unpaid = getUnpaidMonthsForWarga(warga.nama, warga.id);
   const pending = getPendingMonthsForWarga(warga.nama);
   const availableUnpaid = unpaid.filter(b => !pending.includes(b));
 
@@ -2784,6 +2795,54 @@ function selectBayarWarga(wargaId) {
     bayarKodeUnik = generateRandomKodeUnik();
   }
 
+  renderApp();
+}
+
+function eksekusiCariWargaBayar() {
+  const inputEl = document.getElementById('bayarSearchInput');
+  const query = inputEl ? inputEl.value.trim() : (bayarSearchFilter || '').trim();
+  if (!query) {
+    showToast('Ketik Nama KK atau Nomor Rumah terlebih dahulu untuk mencari!', 'warning');
+    bayarHasSearched = false;
+    bayarSearchFilter = '';
+    bayarSelectedWargaId = '';
+    bayarSelectedBulan = [];
+    renderApp();
+    return;
+  }
+
+  bayarSearchFilter = query;
+  bayarHasSearched = true;
+
+  const qLower = query.toLowerCase();
+  const matches = db.warga.filter(w => {
+    const mNama = w.nama && w.nama.toLowerCase().includes(qLower);
+    const mRumah = w.noRumah && w.noRumah.toLowerCase().includes(qLower);
+    return mNama || mRumah;
+  });
+
+  if (matches.length === 0) {
+    bayarSelectedWargaId = '';
+    bayarSelectedBulan = [];
+    showToast(`Tidak ditemukan KK dengan kata kunci: "${query}"`, 'warning');
+    renderApp();
+    return;
+  }
+
+  if (matches.length === 1) {
+    showToast(`Ditemukan: ${matches[0].nama} (${matches[0].noRumah})`, 'success');
+    selectBayarWarga(matches[0].id);
+  } else {
+    showToast(`Ditemukan ${matches.length} KK yang cocok dengan "${query}". Silakan pilih dari daftar.`, 'info');
+    selectBayarWarga(matches[0].id);
+  }
+}
+
+function resetCariWargaBayar() {
+  bayarSearchFilter = '';
+  bayarHasSearched = false;
+  bayarSelectedWargaId = '';
+  bayarSelectedBulan = [];
   renderApp();
 }
 
@@ -3403,12 +3462,23 @@ function initQrisCode() {
   if (!container) return;
   container.innerHTML = '';
 
-  const warga = db.warga.find(w => w.id === bayarSelectedWargaId) || db.warga[0];
+  const warga = bayarSelectedWargaId ? db.warga.find(w => w.id === bayarSelectedWargaId) : null;
   const tarif = Number(appConfig.tarifIuran) || 75000;
-  const countBulan = bayarSelectedBulan.length > 0 ? bayarSelectedBulan.length : 1;
-  const nominal = (countBulan * tarif) + (appConfig.pgGunakanKodeUnik !== false ? (bayarKodeUnik || 124) : 0);
+  const countBulan = bayarSelectedBulan.length;
+  const nominal = (countBulan * tarif) + (appConfig.pgGunakanKodeUnik !== false && countBulan > 0 ? (bayarKodeUnik || 124) : 0);
   const merchant = appConfig.pgQrisMerchant || 'RT 04 RW 14 CISARANTEN KULON';
   const nmid = appConfig.pgQrisNmid || 'ID102604140001';
+
+  if (!warga || countBulan === 0 || nominal <= 0) {
+    container.innerHTML = `
+      <div class="text-center p-6 text-slate-400 text-xs font-medium space-y-1">
+        <i class="ph-bold ph-qr-code text-4xl mb-1 text-slate-300 block mx-auto"></i>
+        <p class="font-bold text-slate-600">QRIS Dinamis</p>
+        <p class="text-[10px] text-slate-400">Cari KK dan pilih periode bulan untuk memuat kode QRIS.</p>
+      </div>
+    `;
+    return;
+  }
 
   // Format QRIS EMV Payload Representation
   const qrisPayload = `00020101021226${String(nmid.length + 8).padStart(2, '0')}0014ID.LINKAJA.WWW0118${nmid}51440014ID.CO.QRIS.WWW0215ID1026041400010303UME520454995303360540${String(nominal).length}${nominal}5802ID59${String(merchant.length).padStart(2, '0')}${merchant}6007BANDUNG61054029362${String((warga ? warga.nama.slice(0, 18) : 'WARGA').length + 4).padStart(2, '0')}01${String((warga ? warga.nama.slice(0, 18) : 'WARGA').length).padStart(2, '0')}${warga ? warga.nama.slice(0, 18) : 'WARGA'}6304ABCD`;
@@ -3581,34 +3651,25 @@ function renderBayarIuran() {
 function renderBayarPortalView() {
   const tarif = Number(appConfig.tarifIuran) || 75000;
   
-  // Auto-select warga pertama jika belum dipilih
-  if (!bayarSelectedWargaId && db.warga.length > 0) {
-    bayarSelectedWargaId = db.warga[0].id;
-    const unpaid = getUnpaidMonthsForWarga(db.warga[0].nama);
-    const targetBulanIni = `${CURRENT_MONTH_NAME} ${CURRENT_YEAR}`;
-    if (unpaid.includes(targetBulanIni)) {
-      bayarSelectedBulan = [targetBulanIni];
-    } else if (unpaid.length > 0) {
-      bayarSelectedBulan = [unpaid[0]];
-    }
-    if (bayarKodeUnik === 0) bayarKodeUnik = generateRandomKodeUnik();
-  }
-
-  const warga = db.warga.find(w => w.id === bayarSelectedWargaId) || db.warga[0];
-  const unpaidMonths = warga ? getUnpaidMonthsForWarga(warga.nama) : [];
+  // Warga yang dipilih (hanya jika ada yang dipilih)
+  const warga = bayarSelectedWargaId ? db.warga.find(w => w.id === bayarSelectedWargaId) : null;
+  const unpaidMonths = warga ? getUnpaidMonthsForWarga(warga.nama, warga.id) : [];
   const pendingMonths = warga ? getPendingMonthsForWarga(warga.nama) : [];
 
-  const countBulan = bayarSelectedBulan.length;
+  const countBulan = warga ? bayarSelectedBulan.length : 0;
   const subtotal = countBulan * tarif;
-  const kodeUnik = appConfig.pgGunakanKodeUnik !== false ? (bayarKodeUnik || 124) : 0;
+  const kodeUnik = (appConfig.pgGunakanKodeUnik !== false && countBulan > 0) ? (bayarKodeUnik || 124) : 0;
   const totalBayar = subtotal + (countBulan > 0 ? kodeUnik : 0);
 
-  // Filter pencarian warga di dropdown
-  const qWarga = bayarSearchFilter.toLowerCase().trim();
-  const filteredWarga = db.warga.filter(w => {
-    if (!qWarga) return true;
-    return w.nama.toLowerCase().includes(qWarga) || (w.noRumah && w.noRumah.toLowerCase().includes(qWarga));
-  });
+  // Filter pencarian warga di dropdown (Dikosongkan jika belum melakukan pencarian)
+  const qWarga = (bayarSearchFilter || '').toLowerCase().trim();
+  const filteredWarga = bayarHasSearched
+    ? db.warga.filter(w => {
+        if (!qWarga) return false;
+        return (w.nama && w.nama.toLowerCase().includes(qWarga)) || 
+               (w.noRumah && w.noRumah.toLowerCase().includes(qWarga));
+      })
+    : [];
 
   return `
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
@@ -3629,25 +3690,53 @@ function renderBayarPortalView() {
           <!-- Input Filter Cepat Warga -->
           <div>
             <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Cari Nama KK atau Nomor Rumah</label>
-            <div class="relative">
-              <i class="ph-bold ph-magnifying-glass absolute left-3.5 top-3 text-slate-400"></i>
-              <input type="text" 
-                value="${bayarSearchFilter}" 
-                oninput="bayarSearchFilter = this.value; renderApp();" 
-                placeholder="Ketik nama KK atau blok rumah (misal: Bambang / Ciskul 9)..." 
-                class="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            <div class="flex items-center gap-2">
+              <div class="relative flex-1">
+                <i class="ph-bold ph-magnifying-glass absolute left-3.5 top-3 text-slate-400"></i>
+                <input type="text" 
+                  id="bayarSearchInput"
+                  value="${bayarSearchFilter}" 
+                  placeholder="Ketik nama KK atau nomor rumah (misal: Bambang / Ciskul 9)..." 
+                  onkeydown="if(event.key === 'Enter'){ event.preventDefault(); eksekusiCariWargaBayar(); }"
+                  class="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              </div>
+              <button type="button" 
+                onclick="eksekusiCariWargaBayar()" 
+                class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 flex-shrink-0">
+                <i class="ph-bold ph-magnifying-glass text-sm"></i>
+                <span>Cari</span>
+              </button>
+              ${bayarHasSearched ? `
+                <button type="button" 
+                  onclick="resetCariWargaBayar()" 
+                  title="Kosongkan Pencarian"
+                  class="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95 flex-shrink-0 border border-slate-200">
+                  <i class="ph-bold ph-x text-sm"></i>
+                  <span class="hidden sm:inline">Kosongkan</span>
+                </button>
+              ` : ''}
             </div>
+            <p class="text-[10.5px] text-slate-400 mt-1">Ketik langsung tanpa jeda, lalu tekan <b>Enter</b> atau klik <b>Cari</b>.</p>
           </div>
 
           <!-- Dropdown Pilihan Warga -->
           <div>
-            <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Daftar Kepala Keluarga RT 04 (${filteredWarga.length} Terdaftar)</label>
-            <select onchange="selectBayarWarga(this.value)" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-              ${filteredWarga.map(w => `
-                <option value="${w.id}" ${w.id === bayarSelectedWargaId ? 'selected' : ''}>
-                  ${w.nama} • ${w.noRumah} (${w.status})
-                </option>
-              `).join('')}
+            <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+              Daftar Kepala Keluarga RT 04 ${bayarHasSearched ? `(${filteredWarga.length} Hasil Pencarian)` : '(Kosong)'}
+            </label>
+            <select id="bayarDropdownWarga" onchange="selectBayarWarga(this.value)" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              ${!bayarHasSearched ? `
+                <option value="">-- Daftar KK kosong (Silakan ketik pencarian di atas lalu klik Cari) --</option>
+              ` : (filteredWarga.length === 0 ? `
+                <option value="">-- Tidak ada KK yang cocok dengan "${bayarSearchFilter}" --</option>
+              ` : (
+                (filteredWarga.length > 1 ? '<option value="">-- Pilih salah satu KK hasil pencarian --</option>' : '') +
+                filteredWarga.map(w => `
+                  <option value="${w.id}" ${w.id === bayarSelectedWargaId ? 'selected' : ''}>
+                    ${w.nama} • ${w.noRumah} (${w.status})
+                  </option>
+                `).join('')
+              ))}
             </select>
           </div>
 
@@ -3690,73 +3779,81 @@ function renderBayarPortalView() {
             </span>
           </div>
 
-          <!-- Tombol Pintas Seleksi Cepat -->
-          <div class="flex flex-wrap gap-1.5">
-            <button type="button" onclick="pilihSemuaTunggakanBayar('${warga ? warga.id : ''}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-[11px] font-bold transition flex items-center gap-1 active:scale-95 shadow-2xs">
-              <i class="ph-bold ph-lightning"></i>
-              <span>Lunasi Tunggakan</span>
-            </button>
-            <button type="button" onclick="pilihPaketBulan(1, '${warga ? warga.id : ''}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition active:scale-95">
-              1 Bulan
-            </button>
-            <button type="button" onclick="pilihPaketBulan(3, '${warga ? warga.id : ''}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition active:scale-95">
-              3 Bulan (1 Triwulan)
-            </button>
-            <button type="button" onclick="pilihPaketBulan(6, '${warga ? warga.id : ''}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition active:scale-95">
-              6 Bulan (1 Semester)
-            </button>
-            <button type="button" onclick="pilihPaketBulan(12, '${warga ? warga.id : ''}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition active:scale-95">
-              1 Tahun Penuh (12 Bulan)
-            </button>
-          </div>
-
-          <!-- Grid Pilihan 12 Bulan -->
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 pt-1">
-            ${NAMA_BULAN_ID.map(mName => {
-              const bulanStr = `${mName} ${CURRENT_YEAR}`;
-              const isLunas = warga ? db.iuran.some(i => i.nama.toLowerCase().trim() === warga.nama.toLowerCase().trim() && i.bulan.toLowerCase().trim() === bulanStr.toLowerCase().trim() && i.status === 'Lunas') : false;
-              const isPending = pendingMonths.includes(bulanStr);
-              const isSelected = bayarSelectedBulan.includes(bulanStr);
-
-              return `
-                <div onclick="${isLunas || isPending ? '' : `toggleBayarBulan('${bulanStr}')`}" 
-                  class="p-2.5 rounded-2xl border text-center transition select-none ${
-                    isLunas 
-                      ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-70 cursor-not-allowed' 
-                      : (isPending 
-                          ? 'bg-amber-50/80 border-amber-200 text-amber-700 cursor-not-allowed' 
-                          : (isSelected 
-                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-[1.02] cursor-pointer' 
-                              : 'bg-slate-50 hover:bg-emerald-50/50 border-slate-200/90 text-slate-700 cursor-pointer'))
-                  }">
-                  <div class="flex items-center justify-between text-[10px] font-bold">
-                    <span>${mName.slice(0, 3)}</span>
-                    ${isLunas 
-                      ? '<i class="ph-bold ph-check text-emerald-600"></i>' 
-                      : (isPending 
-                          ? '<i class="ph-bold ph-clock text-amber-600"></i>' 
-                          : (isSelected 
-                              ? '<i class="ph-bold ph-check-circle text-white"></i>' 
-                              : '<i class="ph-bold ph-circle text-slate-300"></i>'))}
-                  </div>
-                  <p class="text-xs font-black mt-1 ${isSelected ? 'text-white' : 'text-slate-800'}">${mName}</p>
-                  <span class="text-[9px] block mt-0.5 ${isSelected ? 'text-emerald-100 font-bold' : (isLunas ? 'text-emerald-700 font-bold' : (isPending ? 'text-amber-700 font-bold' : 'text-slate-400'))}">
-                    ${isLunas ? 'Sudah Lunas' : (isPending ? 'Pending Verif' : `Rp ${(tarif / 1000)}rb`)}
-                  </span>
-                </div>
-              `;
-            }).join('')}
-          </div>
-
-          ${countBulan === 0 ? `
-            <p class="text-xs text-rose-600 font-bold pt-1">
-              * Silakan pilih minimal 1 bulan iuran di atas untuk melanjutkan pembayaran.
-            </p>
-          ` : `
-            <div class="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between">
-              <span>Bulan dipilih (<b>${countBulan} Bulan</b>): <b>${bayarSelectedBulan.join(', ')}</b></span>
-              <button onclick="bayarSelectedBulan = []; renderApp();" class="text-[11px] text-rose-600 hover:underline font-bold">Batal Pilih</button>
+          ${!warga ? `
+            <div class="p-6 text-center bg-slate-50/80 rounded-2xl border border-dashed border-slate-200 space-y-2">
+              <i class="ph-bold ph-identification-card text-3xl text-slate-300 block mx-auto"></i>
+              <p class="text-xs font-bold text-slate-600">Daftar Tagihan Iuran Belum Muncul</p>
+              <p class="text-[11px] text-slate-400">Silakan cari Nama KK atau Nomor Rumah pada Langkah 1 di atas untuk memuat tagihan iuran.</p>
             </div>
+          ` : `
+            <!-- Tombol Pintas Seleksi Cepat -->
+            <div class="flex flex-wrap gap-1.5">
+              <button type="button" onclick="pilihSemuaTunggakanBayar('${warga.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-[11px] font-bold transition flex items-center gap-1 active:scale-95 shadow-2xs">
+                <i class="ph-bold ph-lightning"></i>
+                <span>Lunasi Tunggakan</span>
+              </button>
+              <button type="button" onclick="pilihPaketBulan(1, '${warga.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition active:scale-95">
+                1 Bulan
+              </button>
+              <button type="button" onclick="pilihPaketBulan(3, '${warga.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition active:scale-95">
+                3 Bulan (1 Triwulan)
+              </button>
+              <button type="button" onclick="pilihPaketBulan(6, '${warga.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition active:scale-95">
+                6 Bulan (1 Semester)
+              </button>
+              <button type="button" onclick="pilihPaketBulan(12, '${warga.id}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition active:scale-95">
+                1 Tahun Penuh (12 Bulan)
+              </button>
+            </div>
+
+            <!-- Grid Pilihan 12 Bulan -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 pt-1">
+              ${NAMA_BULAN_ID.map(mName => {
+                const bulanStr = `${mName} ${CURRENT_YEAR}`;
+                const isLunas = db.iuran.some(i => i.nama.toLowerCase().trim() === warga.nama.toLowerCase().trim() && i.bulan.toLowerCase().trim() === bulanStr.toLowerCase().trim() && i.status === 'Lunas');
+                const isPending = pendingMonths.includes(bulanStr);
+                const isSelected = bayarSelectedBulan.includes(bulanStr);
+
+                return `
+                  <div onclick="${isLunas || isPending ? '' : `toggleBayarBulan('${bulanStr}')`}" 
+                    class="p-2.5 rounded-2xl border text-center transition select-none ${
+                      isLunas 
+                        ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-70 cursor-not-allowed' 
+                        : (isPending 
+                            ? 'bg-amber-50/80 border-amber-200 text-amber-700 cursor-not-allowed' 
+                            : (isSelected 
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-[1.02] cursor-pointer' 
+                                : 'bg-slate-50 hover:bg-emerald-50/50 border-slate-200/90 text-slate-700 cursor-pointer'))
+                    }">
+                    <div class="flex items-center justify-between text-[10px] font-bold">
+                      <span>${mName.slice(0, 3)}</span>
+                      ${isLunas 
+                        ? '<i class="ph-bold ph-check text-emerald-600"></i>' 
+                        : (isPending 
+                            ? '<i class="ph-bold ph-clock text-amber-600"></i>' 
+                            : (isSelected 
+                                ? '<i class="ph-bold ph-check-circle text-white"></i>' 
+                                : '<i class="ph-bold ph-circle text-slate-300"></i>'))}
+                    </div>
+                    <p class="text-xs font-black mt-1 ${isSelected ? 'text-white' : 'text-slate-800'}">${mName}</p>
+                    <span class="text-[9px] block mt-0.5 ${isSelected ? 'text-emerald-100 font-bold' : (isLunas ? 'text-emerald-700 font-bold' : (isPending ? 'text-amber-700 font-bold' : 'text-slate-400'))}">
+                      ${isLunas ? 'Sudah Lunas' : (isPending ? 'Pending Verif' : `Rp ${(tarif / 1000)}rb`)}
+                    </span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+
+            ${countBulan === 0 ? `
+              <p class="text-xs text-rose-600 font-bold pt-1">
+                * Silakan pilih minimal 1 bulan iuran di atas untuk melanjutkan pembayaran.
+              </p>
+            ` : `
+              <div class="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between">
+                <span>Bulan dipilih (<b>${countBulan} Bulan</b>): <b>${bayarSelectedBulan.join(', ')}</b></span>
+                <button onclick="bayarSelectedBulan = []; renderApp();" class="text-[11px] text-rose-600 hover:underline font-bold">Batal Pilih</button>
+              </div>
+            `}
           `}
         </div>
 
@@ -3816,9 +3913,9 @@ function renderBayarPortalView() {
 
             <!-- Tombol Kirim Konfirmasi -->
             <div class="pt-2 flex flex-col sm:flex-row items-center gap-2">
-              <button type="submit" ${countBulan === 0 ? 'disabled' : ''} class="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/30 transition active:scale-95 flex items-center justify-center gap-2">
+              <button type="submit" ${!warga || countBulan === 0 ? 'disabled' : ''} class="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/30 transition active:scale-95 flex items-center justify-center gap-2">
                 <i class="ph-bold ph-paper-plane-tilt text-base"></i>
-                <span>Konfirmasi Pembayaran Mandiri</span>
+                <span>${!warga ? 'Pilih Kepala Keluarga Terlebih Dahulu' : (countBulan === 0 ? 'Pilih Minimal 1 Bulan Iuran' : 'Konfirmasi Pembayaran Mandiri')}</span>
               </button>
             </div>
           </form>
