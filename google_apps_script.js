@@ -399,6 +399,69 @@ function doPost(e) {
       return createJsonResponse({ status: 'error', message: 'Data pembayaran tidak ditemukan' });
     }
 
+    // 20. Hapus Riwayat & Status Tagihan Pembayaran
+    if (action === 'DELETE_PEMBAYARAN') {
+      const p = body.data;
+      const invoiceId = String(p.id);
+
+      // A. Hapus baris dari sheet Pembayaran
+      const paySheet = ss.getSheetByName('Pembayaran');
+      if (paySheet) {
+        const payRows = paySheet.getDataRange().getValues();
+        for (let i = 1; i < payRows.length; i++) {
+          if (String(payRows[i][0]) === invoiceId) {
+            paySheet.deleteRow(i + 1);
+            break;
+          }
+        }
+      }
+
+      // B. Jika transaksi berstatus Lunas, reset status tagihan di sheet Iuran & hapus mutasi kas
+      if (p.status === 'Lunas') {
+        const bulanArr = Array.isArray(p.bulanList) 
+          ? p.bulanList 
+          : (typeof p.bulanList === 'string' ? p.bulanList.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+        const iuranSheet = ss.getSheetByName('Iuran');
+        if (iuranSheet && bulanArr.length > 0) {
+          const iuranRows = iuranSheet.getDataRange().getValues();
+          const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+          bulanArr.forEach(bulanTarget => {
+            const bTarget = String(bulanTarget).toLowerCase().trim();
+            for (let i = 1; i < iuranRows.length; i++) {
+              const rowNama = String(iuranRows[i][2]).toLowerCase().trim();
+              let rowBulan = iuranRows[i][3];
+              if (rowBulan instanceof Date) {
+                rowBulan = months[rowBulan.getMonth()] + ' ' + rowBulan.getFullYear();
+              }
+              rowBulan = String(rowBulan).toLowerCase().trim();
+
+              if (rowNama === String(p.namaWarga).toLowerCase().trim() && rowBulan === bTarget) {
+                iuranSheet.getRange(i + 1, 6).setValue('Belum Lunas');
+                iuranSheet.getRange(i + 1, 7).setValue('-');
+                break;
+              }
+            }
+          });
+        }
+
+        const kasSheet = ss.getSheetByName('Kas');
+        if (kasSheet) {
+          const kasRows = kasSheet.getDataRange().getValues();
+          for (let i = 1; i < kasRows.length; i++) {
+            const ket = String(kasRows[i][4]);
+            if (ket.indexOf(invoiceId) !== -1) {
+              kasSheet.deleteRow(i + 1);
+              break;
+            }
+          }
+        }
+      }
+
+      return createJsonResponse({ status: 'success', message: 'Riwayat pembayaran dan status tagihan berhasil dihapus/direset' });
+    }
+
     return createJsonResponse({ status: 'error', message: 'Aksi tidak dikenali' });
 
   } catch (err) {

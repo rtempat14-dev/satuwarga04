@@ -3190,6 +3190,130 @@ function eksekusiTolakPembayaran(invoiceId) {
   renderApp();
 }
 
+// Hapus Riwayat & Status Tagihan Pembayaran (Khusus Bendahara & Admin)
+function bukaModalHapusRiwayatBayar(invoiceId) {
+  if (!canManageKeuangan()) {
+    showToast('Hanya Bendahara RT dan Administrator yang berwenang menghapus riwayat tagihan!', 'error');
+    return;
+  }
+
+  const p = (db.pembayaran || []).find(item => item.id === invoiceId);
+  if (!p) {
+    showToast('Data pembayaran tidak ditemukan!', 'error');
+    return;
+  }
+
+  const isLunas = p.status === 'Lunas';
+  const bulanArr = Array.isArray(p.bulanList) 
+    ? p.bulanList 
+    : (typeof p.bulanList === 'string' ? p.bulanList.split(',').map(s => s.trim()).filter(Boolean) : []);
+  const bulanStr = bulanArr.join(', ');
+
+  const html = `
+    <div class="space-y-4 text-center p-2">
+      <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto text-2xl">
+        <i class="ph-bold ph-trash"></i>
+      </div>
+      <div>
+        <h3 class="text-sm font-black text-slate-900 font-display">Hapus Riwayat & Status Tagihan?</h3>
+        <p class="text-xs text-slate-500 mt-1">
+          No. Invoice: <b class="font-mono text-slate-800">${p.id}</b><br>
+          Warga: <b>${p.namaWarga}</b> (${p.noRumah || '-'})<br>
+          Bulan: <b class="text-emerald-700">${bulanStr}</b> • Total: <b>Rp ${(Number(p.totalBayar) || 0).toLocaleString('id-ID')}</b>
+        </p>
+      </div>
+
+      ${isLunas ? `
+        <div class="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-left text-xs text-amber-800 space-y-1">
+          <div class="flex items-center gap-1.5 font-bold text-amber-900">
+            <i class="ph-bold ph-warning"></i>
+            <span>Perhatian Status Tagihan & Kas RT:</span>
+          </div>
+          <p class="text-[11px] leading-relaxed">
+            Transaksi ini berstatus <b>Lunas</b>. Jika dihapus:
+          </p>
+          <ul class="text-[11px] list-disc list-inside space-y-0.5 text-amber-900 font-medium">
+            <li>Status tagihan iuran bulan <b>${bulanStr}</b> akan otomatis <b>direset menjadi Belum Lunas</b>.</li>
+            <li>Pencatatan kas masuk sebesar <b>Rp ${(Number(p.totalBayar) || 0).toLocaleString('id-ID')}</b> akan <b>dihapus dari Buku Kas RT</b>.</li>
+          </ul>
+        </div>
+      ` : `
+        <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600 text-left">
+          <p class="text-[11px]">Riwayat transaksi dengan status <b>${p.status}</b> ini akan dihapus permanen dari sistem mandiri.</p>
+        </div>
+      `}
+
+      <div class="flex space-x-2 pt-2">
+        <button onclick="closeModal()" class="w-1/2 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition">Batal</button>
+        <button onclick="eksekusiHapusRiwayatBayar('${p.id}')" class="w-1/2 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shadow active:scale-95 flex items-center justify-center gap-1.5">
+          <i class="ph-bold ph-trash"></i>
+          <span>Ya, Hapus Tagihan</span>
+        </button>
+      </div>
+    </div>
+  `;
+  openModal(html);
+}
+
+function eksekusiHapusRiwayatBayar(invoiceId) {
+  if (!canManageKeuangan()) {
+    showToast('Hanya Bendahara RT dan Administrator yang berwenang menghapus riwayat tagihan!', 'error');
+    return;
+  }
+
+  const p = (db.pembayaran || []).find(item => item.id === invoiceId);
+  if (!p) {
+    showToast('Data pembayaran tidak ditemukan!', 'error');
+    return;
+  }
+
+  const bulanArr = Array.isArray(p.bulanList) 
+    ? p.bulanList 
+    : (typeof p.bulanList === 'string' ? p.bulanList.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+  // 1. Jika status Lunas, kembalikan status iuran bulan-bulan tersebut jadi Belum Lunas di db.iuran
+  if (p.status === 'Lunas' && bulanArr.length > 0) {
+    bulanArr.forEach(bulanStr => {
+      const existing = db.iuran.find(i => 
+        i.nama.toLowerCase().trim() === p.namaWarga.toLowerCase().trim() && 
+        i.bulan.toLowerCase().trim() === bulanStr.toLowerCase().trim()
+      );
+      if (existing) {
+        existing.status = 'Belum Lunas';
+        existing.tglBayar = '-';
+      }
+    });
+
+    // 2. Hapus catatan kas masuk terkait invoice ini dari db.kas
+    const kasIdx = db.kas.findIndex(k => k.keterangan && k.keterangan.includes(p.id));
+    if (kasIdx !== -1) {
+      const deletedKas = db.kas.splice(kasIdx, 1)[0];
+      kirimDataKeSheets('DELETE_KAS', { id: deletedKas.id });
+    }
+  }
+
+  // 3. Hapus data dari db.pembayaran
+  db.pembayaran = (db.pembayaran || []).filter(item => item.id !== invoiceId);
+
+  // 4. Audit log
+  const userAktif = currentUser ? (currentUser.namaWarga || currentUser.username) : 'Bendahara/Admin';
+  logEvent('GATEWAY', `Hapus riwayat & status tagihan: ${p.namaWarga} (${p.id}) [Status: ${p.status}]`, 'danger', userAktif);
+
+  // 5. Kirim sinkronisasi ke backend Google Sheets
+  kirimDataKeSheets('DELETE_PEMBAYARAN', {
+    id: p.id,
+    wargaId: p.wargaId,
+    namaWarga: p.namaWarga,
+    bulanList: bulanArr,
+    status: p.status,
+    totalBayar: p.totalBayar
+  });
+
+  closeModal();
+  showToast(`Riwayat pembayaran ${invoiceId} dan status tagihan berhasil dihapus/direset!`, 'success');
+  renderApp();
+}
+
 function openModalLihatBukti(invoiceId) {
   const p = (db.pembayaran || []).find(item => item.id === invoiceId);
   if (!p || !p.buktiBayar) {
@@ -3332,6 +3456,12 @@ function openModalInvoicePembayaran(invoiceId) {
           <button onclick="openModalLihatBukti('${p.id}')" class="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95">
             <i class="ph-bold ph-image"></i>
             <span>Bukti</span>
+          </button>
+        ` : ''}
+        ${canManageKeuangan() ? `
+          <button onclick="bukaModalHapusRiwayatBayar('${p.id}')" title="Hapus Riwayat & Status Tagihan (Bendahara/Admin)" class="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95">
+            <i class="ph-bold ph-trash text-base"></i>
+            <span>Hapus</span>
           </button>
         ` : ''}
         <button onclick="closeModal()" class="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition">
@@ -4255,6 +4385,12 @@ function renderBayarRiwayatView() {
                   <button onclick="bukaWhatsAppKonfirmasi('${p.id}')" title="Kirim ke WhatsApp Bendahara" class="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl transition active:scale-95">
                     <i class="ph-bold ph-whatsapp-logo text-base"></i>
                   </button>
+
+                  ${canManageKeuangan() ? `
+                    <button onclick="bukaModalHapusRiwayatBayar('${p.id}')" title="Hapus Riwayat & Status Tagihan (Bendahara/Admin)" class="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl transition active:scale-95">
+                      <i class="ph-bold ph-trash text-base"></i>
+                    </button>
+                  ` : ''}
                 </div>
               </div>
             </div>
@@ -4400,6 +4536,11 @@ function renderBayarVerifikasiView() {
                   </div>
 
                   <div class="flex items-center space-x-2">
+                    ${canManageKeuangan() ? `
+                      <button onclick="bukaModalHapusRiwayatBayar('${p.id}')" title="Hapus Transaksi Tagihan (Bendahara/Admin)" class="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl transition active:scale-95">
+                        <i class="ph-bold ph-trash text-sm"></i>
+                      </button>
+                    ` : ''}
                     <button onclick="openModalTolakPembayaran('${p.id}')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition active:scale-95">
                       Tolak
                     </button>
