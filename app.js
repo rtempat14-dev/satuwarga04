@@ -44,6 +44,9 @@ let logFilterTipe = 'semua';
 let modalKartuTahun = CURRENT_YEAR;
 let berandaTunggakanBulan = `${CURRENT_MONTH_NAME} ${CURRENT_YEAR}`;
 let filterTunggakanMode = 'akumulasi'; // 'akumulasi' | 'bulan_lalu' | 'perbulan'
+let radarAutoScrollEnabled = true; // Auto scroll aktif berjalan terus untuk Radar Tunggakan
+let radarScrollAnimId = null;
+let radarScrollTimer = null;
 let wargaSearchQuery = '';
 let wargaFilterStatus = 'semua'; // 'semua' | 'Tetap' | 'Kontrak'
 let wargaFilterBlok = 'semua'; // 'semua' | 'Ciskul I' | 'Ciskul 6' | 'Ciskul 7' | ...
@@ -707,6 +710,7 @@ function toggleViewMode() {
     setTimeout(() => {
       initBerandaChart();
       initBerandaKependudukanCharts();
+      initRadarTunggakanAutoScroll();
     }, 120);
   } else if (activeTab === 'kas') {
     setTimeout(initKasChart, 120);
@@ -803,7 +807,10 @@ function renderApp() {
     setTimeout(() => {
       initBerandaChart();
       initBerandaKependudukanCharts();
+      initRadarTunggakanAutoScroll();
     }, 120);
+  } else {
+    stopRadarTunggakanAutoScroll();
   }
   if (activeTab === 'kas') setTimeout(initKasChart, 120);
   if (activeTab === 'iuran') setTimeout(initIuranChart, 120);
@@ -1420,14 +1427,34 @@ function renderDashboardTunggakanSection() {
     }
   });
 
+  // Urutkan penunggak: yang belum lunas terbanyak di atas, yang tinggal nunggak 1 bulan di bawah
+  daftarPenunggak.sort((a, b) => {
+    const diffBulan = b.bulanNunggak.length - a.bulanNunggak.length;
+    if (diffBulan !== 0) return diffBulan;
+    const diffNominal = b.nominalTunggak - a.nominalTunggak;
+    if (diffNominal !== 0) return diffNominal;
+    return a.nama.localeCompare(b.nama, 'id');
+  });
+
+  const cardsHtml = daftarPenunggak.map(w => renderCardPenunggak(w, tarif)).join('');
+  const track2Html = (daftarPenunggak.length < 5) ? (cardsHtml + cardsHtml) : cardsHtml;
+
   return `
     <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-3.5">
       <div class="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-            <i class="ph-bold ph-warning-circle text-rose-500 text-base"></i>
-            Radar Iuran Warga Belum Lunas
-          </h3>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <i class="ph-bold ph-warning-circle text-rose-500 text-base"></i>
+              Radar Iuran Warga Belum Lunas
+            </h3>
+            ${daftarPenunggak.length > 2 ? `
+              <button id="btnToggleRadarScroll" onclick="toggleRadarAutoScroll()" title="Klik untuk Jeda / Lanjutkan Auto Scroll (Otomatis jeda saat kursor diarahkan atau disentuh)" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black transition shadow-2xs border ${radarAutoScrollEnabled ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'} cursor-pointer">
+                <span id="radarScrollIndicatorDot" class="w-1.5 h-1.5 rounded-full ${radarAutoScrollEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}"></span>
+                <span id="radarScrollStatusText">${radarAutoScrollEnabled ? 'Auto-Scroll Berjalan' : 'Auto-Scroll Jeda'}</span>
+              </button>
+            ` : ''}
+          </div>
           <p class="text-[11px] text-slate-400 mt-0.5">
             ${daftarPenunggak.length} KK Belum Lunas (Total Rp ${totalUangTunggakan.toLocaleString('id-ID')})
             ${canManageIuran() ? '<span class="text-brand-600 font-black ml-1">• Akses Kelola Aktif</span>' : ''}
@@ -1469,51 +1496,164 @@ function renderDashboardTunggakanSection() {
           <p class="text-[11px] text-brand-700 mt-0.5">Semua warga telah melunasi iuran untuk filter periode yang dipilih.</p>
         </div>
       ` : `
-        <div class="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-          ${daftarPenunggak.map((w) => {
-            const pesanWa = `Halo Bpk/Ibu ${w.nama} (${w.noRumah}), salam hangat dari Pengurus RT 04 / RW 14 Cisaranten Kulon. Mengingatkan informasi iuran kas RT untuk periode ${w.bulanNunggak.join(', ')} sebesar Rp ${w.nominalTunggak.toLocaleString('id-ID')}. Pembayaran dapat melalui Bendahara RT (${appConfig.namaBendahara}). Hatur nuhun.`;
-            return `
-            <div class="p-3.5 bg-slate-50 hover:bg-slate-100/70 rounded-2xl border border-slate-200/80 flex items-center justify-between flex-wrap gap-2 transition">
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center space-x-2">
-                  <h4 class="text-xs font-black text-slate-900 truncate">${w.nama}</h4>
-                  <span class="px-2 py-0.5 rounded-full text-[9px] font-black ${w.bulanNunggak.length > 1 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-amber-100 text-amber-800 border border-amber-200'}">
-                    ${w.bulanNunggak.length} Bulan Menunggak
-                  </span>
-                </div>
-                <p class="text-[11px] text-slate-500 mt-0.5">${w.noRumah} • Total: <span class="text-rose-600 font-black">Rp ${w.nominalTunggak.toLocaleString('id-ID')}</span></p>
-                <p class="text-[10px] text-rose-600 font-semibold mt-0.5 leading-tight">
-                  <b>Bulan:</b> ${w.bulanNunggak.join(', ')}
-                </p>
-              </div>
-              <div class="flex items-center space-x-1.5 flex-wrap">
-                <button onclick="openModalKartuIuran('${w.id}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition shadow-2xs">
-                  Kartu Iuran
-                </button>
-                ${isPengurus() && w.telp ? `
-                  <a href="https://wa.me/${w.telp.replace(/^0/, '62')}?text=${encodeURIComponent(pesanWa)}" target="_blank" class="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[11px] font-bold transition flex items-center gap-1 shadow-xs" title="Kirim Pengingat WhatsApp">
-                    <i class="ph-bold ph-whatsapp-logo text-sm"></i>
-                    <span class="hidden sm:inline">WA</span>
-                  </a>
-                ` : ''}
-                ${canManageIuran() ? `
-                  <button onclick="lunaskanCepat('${w.nama.replace(/'/g, "\\'")}', '${w.bulanNunggak[0]}', ${tarif})" class="px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-[11px] font-bold transition shadow-xs active:scale-95" title="Lunaskan bulan tertua (${w.bulanNunggak[0]})">
-                    + Lunas 1 Bln
-                  </button>
-                  ${w.bulanNunggak.length > 1 ? `
-                    <button onclick="lunaskanSemuaTunggakan('${w.nama.replace(/'/g, "\\'")}', ${JSON.stringify(w.bulanNunggak).replace(/"/g, '&quot;')}, ${tarif})" class="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[11px] font-black transition shadow-xs active:scale-95" title="Lunaskan semua bulan sekaligus">
-                      Lunas Semua
-                    </button>
-                  ` : ''}
-                ` : ''}
-              </div>
+        <div id="radarTunggakanContainer" class="space-y-2.5 max-h-80 overflow-y-auto pr-1 relative" style="scroll-behavior: auto;">
+          <div id="radarTunggakanTrack1" class="space-y-2.5">
+            ${cardsHtml}
+          </div>
+          ${daftarPenunggak.length > 2 ? `
+            <div id="radarTunggakanCycleBanner" class="py-2 px-3 bg-gradient-to-r from-rose-50 via-amber-50 to-brand-50 border border-slate-200/80 rounded-2xl flex items-center justify-between text-[10.5px] font-bold text-slate-700 shadow-2xs">
+              <span class="flex items-center gap-1.5 text-brand-700 font-black">
+                <i class="ph-bold ph-arrows-clockwise text-xs animate-spin"></i>
+                <span>Kembali Ke Prioritas Teratas (Tunggakan Terbanyak)</span>
+              </span>
+              <span class="text-[9px] text-slate-400 font-black uppercase tracking-wider">Siklus Berulang</span>
             </div>
-            `;
-          }).join('')}
+            <div id="radarTunggakanTrack2" class="space-y-2.5">
+              ${track2Html}
+            </div>
+          ` : ''}
         </div>
       `}
     </div>
   `;
+}
+
+function renderCardPenunggak(w, tarif) {
+  const pesanWa = `Halo Bpk/Ibu ${w.nama} (${w.noRumah}), salam hangat dari Pengurus RT 04 / RW 14 Cisaranten Kulon. Mengingatkan informasi iuran kas RT untuk periode ${w.bulanNunggak.join(', ')} sebesar Rp ${w.nominalTunggak.toLocaleString('id-ID')}. Pembayaran dapat melalui Bendahara RT (${appConfig.namaBendahara}). Hatur nuhun.`;
+  return `
+    <div class="p-3.5 bg-slate-50 hover:bg-slate-100/70 rounded-2xl border border-slate-200/80 flex items-center justify-between flex-wrap gap-2 transition">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center space-x-2">
+          <h4 class="text-xs font-black text-slate-900 truncate">${w.nama}</h4>
+          <span class="px-2 py-0.5 rounded-full text-[9px] font-black ${w.bulanNunggak.length > 1 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-amber-100 text-amber-800 border border-amber-200'}">
+            ${w.bulanNunggak.length} Bulan Menunggak
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-500 mt-0.5">${w.noRumah} • Total: <span class="text-rose-600 font-black">Rp ${w.nominalTunggak.toLocaleString('id-ID')}</span></p>
+        <p class="text-[10px] text-rose-600 font-semibold mt-0.5 leading-tight">
+          <b>Bulan:</b> ${w.bulanNunggak.join(', ')}
+        </p>
+      </div>
+      <div class="flex items-center space-x-1.5 flex-wrap">
+        <button onclick="openModalKartuIuran('${w.id}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition shadow-2xs">
+          Kartu Iuran
+        </button>
+        ${isPengurus() && w.telp ? `
+          <a href="https://wa.me/${w.telp.replace(/^0/, '62')}?text=${encodeURIComponent(pesanWa)}" target="_blank" class="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[11px] font-bold transition flex items-center gap-1 shadow-xs" title="Kirim Pengingat WhatsApp">
+            <i class="ph-bold ph-whatsapp-logo text-sm"></i>
+            <span class="hidden sm:inline">WA</span>
+          </a>
+        ` : ''}
+        ${canManageIuran() ? `
+          <button onclick="lunaskanCepat('${w.nama.replace(/'/g, "\\'")}', '${w.bulanNunggak[0]}', ${tarif})" class="px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-[11px] font-bold transition shadow-xs active:scale-95" title="Lunaskan bulan tertua (${w.bulanNunggak[0]})">
+            + Lunas 1 Bln
+          </button>
+          ${w.bulanNunggak.length > 1 ? `
+            <button onclick="lunaskanSemuaTunggakan('${w.nama.replace(/'/g, "\\'")}', ${JSON.stringify(w.bulanNunggak).replace(/"/g, '&quot;')}, ${tarif})" class="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[11px] font-black transition shadow-xs active:scale-95" title="Lunaskan semua bulan sekaligus">
+              Lunas Semua
+            </button>
+          ` : ''}
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function stopRadarTunggakanAutoScroll() {
+  if (radarScrollAnimId) {
+    cancelAnimationFrame(radarScrollAnimId);
+    radarScrollAnimId = null;
+  }
+  if (radarScrollTimer) {
+    clearTimeout(radarScrollTimer);
+    radarScrollTimer = null;
+  }
+}
+
+function initRadarTunggakanAutoScroll() {
+  stopRadarTunggakanAutoScroll();
+
+  const container = document.getElementById('radarTunggakanContainer');
+  const track1 = document.getElementById('radarTunggakanTrack1');
+  const track2 = document.getElementById('radarTunggakanTrack2');
+
+  if (!container || !track1 || !track2) return;
+
+  let isHovered = false;
+  let isInteracting = false;
+  let currentScrollPos = container.scrollTop;
+  const SPEED = 0.55; // Kecepatan scroll nyaman dan terbaca
+
+  container.addEventListener('mouseenter', () => {
+    isHovered = true;
+  });
+
+  container.addEventListener('mouseleave', () => {
+    isHovered = false;
+    currentScrollPos = container.scrollTop;
+  });
+
+  const pauseInteraction = (resumeDelay = 1800) => {
+    isInteracting = true;
+    if (radarScrollTimer) clearTimeout(radarScrollTimer);
+    radarScrollTimer = setTimeout(() => {
+      isInteracting = false;
+      if (container) {
+        currentScrollPos = container.scrollTop;
+        const loopBoundary = track2.offsetTop;
+        if (loopBoundary > 0 && currentScrollPos >= loopBoundary) {
+          currentScrollPos %= loopBoundary;
+          container.scrollTop = currentScrollPos;
+        }
+      }
+    }, resumeDelay);
+  };
+
+  container.addEventListener('wheel', () => pauseInteraction(2000), { passive: true });
+  container.addEventListener('touchstart', () => pauseInteraction(2500), { passive: true });
+  container.addEventListener('touchmove', () => pauseInteraction(2500), { passive: true });
+  container.addEventListener('pointerdown', () => pauseInteraction(2500));
+
+  function step() {
+    if (radarAutoScrollEnabled && !isHovered && !isInteracting && container) {
+      currentScrollPos += SPEED;
+      const loopBoundary = track2.offsetTop;
+      if (loopBoundary > 0 && currentScrollPos >= loopBoundary) {
+        currentScrollPos -= loopBoundary;
+      }
+      container.scrollTop = currentScrollPos;
+    }
+    radarScrollAnimId = requestAnimationFrame(step);
+  }
+
+  radarScrollAnimId = requestAnimationFrame(step);
+}
+
+function toggleRadarAutoScroll() {
+  radarAutoScrollEnabled = !radarAutoScrollEnabled;
+  const indicator = document.getElementById('radarScrollIndicatorDot');
+  const statusText = document.getElementById('radarScrollStatusText');
+  const btn = document.getElementById('btnToggleRadarScroll');
+  
+  if (indicator) {
+    indicator.className = radarAutoScrollEnabled 
+      ? 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse' 
+      : 'w-1.5 h-1.5 rounded-full bg-slate-400';
+  }
+  if (statusText) {
+    statusText.textContent = radarAutoScrollEnabled ? 'Auto-Scroll Berjalan' : 'Auto-Scroll Jeda';
+  }
+  if (btn) {
+    if (radarAutoScrollEnabled) {
+      btn.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black transition shadow-2xs border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 cursor-pointer';
+    } else {
+      btn.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black transition shadow-2xs border bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200 cursor-pointer';
+    }
+  }
+
+  if (radarAutoScrollEnabled) {
+    initRadarTunggakanAutoScroll();
+  }
 }
 
 function setFilterTunggakanMode(mode) {
