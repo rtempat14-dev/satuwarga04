@@ -188,6 +188,37 @@ const defaultPembayaranData = [
   }
 ];
 
+const defaultPengumumanData = [
+  {
+    id: 'SW04',
+    judul: 'Aplikasi SatuWarga RT 04: Transparansi Keuangan, Jembatan Warga & Pengurus, serta Pusat Informasi Resmi',
+    kategori: 'Informasi Resmi',
+    badge: 'Portal Warga Digital',
+    tanggal: `${CURRENT_YEAR}-${String(CURRENT_MONTH_IDX + 1).padStart(2, '0')}-01`,
+    penulis: 'Pengurus RT 04 Cisaranten Kulon',
+    gambar: 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?auto=format&fit=crop&w=1200&q=80',
+    warnaTema: 'brand',
+    ringkasan: 'Portal digital resmi RT 04 / RW 14 Cisaranten Kulon yang mewujudkan transparansi buku kas & iuran warga secara real-time, mempererat jalinan komunikasi warga dengan pengurus RT, serta menjadi pusat media informasi dan layanan administrasi mandiri.',
+    kontenLengkap: 'Sampurasun & Salam Hangat Seluruh Warga RT 04 / RW 14 Kelurahan Cisaranten Kulon!\n\n' +
+      'Aplikasi *SatuWarga RT 04* dihadirkan sebagai inovasi pelayanan warga berbasis digital yang modern, akuntabel, dan transparan. Dibangun dengan semangat gotong-royong dan kekeluargaan, aplikasi ini mengusung 3 pilar utama untuk seluruh warga:\n\n' +
+      '📊 1. TRANSPARANSI KEUANGAN & KAS WARGA SECARA REAL-TIME\n' +
+      '• *Buku Kas Terbuka*: Setiap rupiah uang masuk dan uang keluar kas RT 04 dapat dipantau langsung oleh seluruh warga tanpa ada yang dirahasiakan.\n' +
+      '• *Radar Iuran Warga*: Memudahkan pengecekan status iuran bulanan per rumah/blok dengan pencatatan yang akurat, transparan, dan rapi.\n' +
+      '• *Pembayaran Iuran Praktis*: Mendukung pembayaran transfer bank maupun QRIS resmi kas RT secara mudah dari rumah lengkap dengan arsip bukti pembayaran digital.\n\n' +
+      '🤝 2. MENDEKATKAN HUBUNGAN WARGA DENGAN PENGURUS RT\n' +
+      '• *Layanan Surat Pengantar 24/7*: Pengurusan surat pengantar (domisili, keterangan usaha, izin nikah, dll.) kini dapat diajukan secara online kapan saja tanpa harus menunggu tatap muka di rumah pengurus.\n' +
+      '• *Kanal Aspirasi & Aduan Warga*: Warga dapat langsung menyampaikan masukan, laporan fasilitas lingkungan (lampu jalan padam, selokan mampet), serta usulan kegiatan warga secara cepat.\n' +
+      '• *Komunikasi Responsif & Guyub*: Akses langsung ke kontak WhatsApp Ketua RT, Bendahara, dan Sekretaris untuk mempererat silaturahmi yang hangat dan kekeluargaan.\n\n' +
+      '📢 3. MEDIA INFORMASI RESMI & AGENDA LINGKUNGAN TERPADU\n' +
+      '• *Papan Informasi Resmi*: Seluruh agenda penting seperti gotong royong, jadwal ronda malam/siskamling, posyandu, hingga rembug warga tersaji dalam satu pintu informasi yang terpercaya.\n' +
+      '• *Bebas Simpang Siur (Anti-Hoaks)*: Menjamin setiap warta dan keputusan lingkungan bersumber resmi dan dapat dipertanggungjawabkan.\n' +
+      '• *e-Sensus & Direktori Warga*: Pendataan kependudukan mandiri guna memastikan seluruh warga terlindungi dan tercatat dengan baik.\n\n' +
+      'Mari bersama-sama kita manfaatkan aplikasi SatuWarga 04 secara optimal demi mewujudkan lingkungan RT 04 / RW 14 Cisaranten Kulon yang rukun, aman, transparan, dan harmonis. Hatur nuhun atas kekompakan dan kepedulian seluruh warga!',
+    aksiLabel: '📊 Buka Buku Kas & Iuran',
+    aksiTab: 'kas'
+  }
+];
+
 let db = {
   users: [
     { username: 'admin', password: '123', role: 'Administrator', namaWarga: 'Super Admin RT 04' },
@@ -211,6 +242,7 @@ let db = {
     { id: 'L01', pelapor: 'Dedi Kurniawan (Ciskul 8)', pesan: 'Lampu penerangan jalan utama dekat pos satpam nomor 2 padam sejak dua hari lalu. Mohon diganti.', status: 'Selesai', tgl: `${CURRENT_YEAR}-01-12`, respon: 'Sudah diganti dengan lampu LED 30 Watt baru oleh petugas ronda.' },
     { id: 'L02', pelapor: 'Ibu Rahma (Ciskul 9)', pesan: 'Usul perbaikan tutup selokan beton di gang belakang yang retak agar tidak membahayakan anak-anak bermain sepeda.', status: 'Diproses', tgl: `${CURRENT_YEAR}-01-18`, respon: 'Akan diagendakan penambalan semen pada saat kerja bakti tanggal 15 nanti.' }
   ],
+  pengumuman: [...defaultPengumumanData],
   logs: [...defaultLogsData]
 };
 
@@ -264,6 +296,11 @@ function loadLocalStorageData() {
         }
         if (!Array.isArray(db.pembayaran) || db.pembayaran.length === 0) {
           db.pembayaran = [...defaultPembayaranData];
+        }
+        if (!Array.isArray(db.pengumuman) || db.pengumuman.length === 0 || (db.pengumuman[0] && db.pengumuman[0].id === 'P01')) {
+          db.pengumuman = [...defaultPengumumanData];
+        } else if (db.pengumuman.length > 1) {
+          db.pengumuman = [db.pengumuman[0]];
         }
       }
     }
@@ -591,10 +628,13 @@ function showToast(message, type = 'success') {
 }
 
 // Reusable Modal Handler
-function openModal(contentHtml) {
+function openModal(contentHtml, customMaxWidth = 'max-w-md') {
   const modal = document.getElementById('modalContainer');
   const content = document.getElementById('modalContent');
   if (!modal || !content) return;
+  
+  // Set width class dinamis (misal max-w-2xl atau max-w-3xl untuk papan informasi)
+  content.className = content.className.replace(/\bmax-w-[a-z0-9]+\b/g, '').trim() + ' ' + (customMaxWidth || 'max-w-md');
   content.innerHTML = contentHtml;
   modal.classList.remove('opacity-0', 'pointer-events-none');
   content.classList.remove('scale-95');
@@ -606,6 +646,11 @@ function closeModal() {
   if (!modal || !content) return;
   modal.classList.add('opacity-0', 'pointer-events-none');
   content.classList.add('scale-95');
+  setTimeout(() => {
+    if (content) {
+      content.className = content.className.replace(/\bmax-w-[a-z0-9]+\b/g, '').trim() + ' max-w-md';
+    }
+  }, 250);
 }
 
 // Hak Akses & Role Pengurus
@@ -724,7 +769,7 @@ function toggleViewMode() {
   }
 }
 
-// Navigasi Atas Khusus Mode Desktop
+// Navigasi Atas Khusus Mode Desktop (Menu Teks & Icon Rapi, Proporsional & Tegas)
 function renderDesktopNav() {
   const container = document.getElementById('desktopNavBar');
   if (!container) return;
@@ -735,7 +780,7 @@ function renderDesktopNav() {
     { tab: 'beranda', label: 'Beranda', icon: 'ph-house' },
     { tab: 'kas', label: 'Buku Kas', icon: 'ph-wallet' },
     { tab: 'iuran', label: 'Iuran Warga', icon: 'ph-receipt' },
-    { tab: 'bayar', label: 'Bayar Iuran', icon: 'ph-credit-card', isGateway: true, badge: 'QRIS', count: pendingCount },
+    { tab: 'bayar', label: 'Bayar Iuran', icon: 'ph-credit-card', isGateway: true, count: pendingCount },
     { tab: 'warga', label: 'Warga RT', icon: 'ph-users' },
     { tab: 'layanan', label: 'Layanan', icon: 'ph-chat-circle-dots' }
   ];
@@ -748,28 +793,26 @@ function renderDesktopNav() {
     const isActive = activeTab === item.tab;
     const isGateway = item.isGateway;
     return `
-      <button onclick="switchTab('${item.tab}')" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center space-x-1.5 flex-shrink-0 relative ${
-        isActive 
-          ? (isGateway ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/30 scale-[1.02] font-black' : 'bg-brand-600 text-white shadow-md shadow-brand-600/30 scale-[1.02] font-black') 
-          : (isGateway ? 'text-emerald-800 bg-emerald-50/80 hover:bg-emerald-100 hover:text-emerald-900 border border-emerald-200/60 font-bold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 font-bold')
-      }">
-        <i class="ph-bold ${item.icon} text-sm ${isActive ? 'text-white' : (isGateway ? 'text-emerald-600' : 'text-slate-500')}"></i>
-        <span>${item.label}</span>
+      <button onclick="switchTab('${item.tab}')" 
+        title="${item.label}" 
+        class="px-2.5 py-1.5 lg:px-3 lg:py-1.5 rounded-xl text-xs lg:text-[12.5px] font-bold transition-all duration-200 flex items-center space-x-1.5 flex-shrink-0 relative active:scale-95 border ${
+          isActive 
+            ? (isGateway ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm border-emerald-500 font-extrabold' : 'bg-brand-600 text-white shadow-sm border-brand-500 font-extrabold') 
+            : (isGateway ? 'text-emerald-800 bg-emerald-50/90 hover:bg-emerald-100 hover:text-emerald-950 border-emerald-200 font-bold shadow-2xs' : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100/90 bg-white/90 border-slate-200 font-bold shadow-2xs')
+        }">
+        <i class="ph-bold ${item.icon} text-sm lg:text-base ${isActive ? 'text-white' : (isGateway ? 'text-emerald-600' : 'text-slate-500')}"></i>
+        <span class="tracking-normal font-bold">${item.label}</span>
         ${item.count > 0 ? `
           <span class="ml-1 px-1.5 py-0.2 rounded-full text-[9px] font-black bg-rose-500 text-white animate-pulse">
             ${item.count}
           </span>
-        ` : (item.badge && !isActive ? `
-          <span class="ml-0.5 text-[8.5px] font-black px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-            ${item.badge}
-          </span>
-        ` : '')}
+        ` : ''}
       </button>
     `;
   }).join('');
 }
 
-// Tombol Switcher Mode Tampilan (Desktop / Ponsel) di Header
+// Tombol Switcher Mode Tampilan (Desktop / Ponsel) di Header - Icon Only
 function renderViewModeToggle() {
   const container = document.getElementById('viewModeToggleContainer');
   if (!container) return;
@@ -777,19 +820,14 @@ function renderViewModeToggle() {
   const isDesktop = currentViewMode === 'desktop';
   container.innerHTML = `
     <button onclick="toggleViewMode()" 
-      title="${isDesktop ? 'Klik untuk beralih ke Mode Ponsel / HP' : 'Klik untuk beralih ke Mode Desktop Layar Lebar'}" 
-      class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center space-x-1.5 active:scale-95 shadow-xs border ${
+      title="${isDesktop ? 'Mode Desktop (Klik untuk beralih ke Mode Ponsel)' : 'Mode Ponsel (Klik untuk beralih ke Mode Desktop)'}" 
+      aria-label="${isDesktop ? 'Mode Desktop' : 'Mode Ponsel'}"
+      class="w-9 h-9 rounded-xl transition-all duration-200 flex items-center justify-center active:scale-95 shadow-xs border ${
         isDesktop 
-          ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200' 
-          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+          ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200/90' 
+          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200/90'
       }">
-      <i class="ph-bold ${isDesktop ? 'ph-monitor text-emerald-600' : 'ph-device-mobile text-slate-500'} text-base"></i>
-      <span class="hidden md:inline font-bold">${isDesktop ? 'Mode Desktop' : 'Mode Ponsel'}</span>
-      <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${
-        isDesktop ? 'bg-emerald-200/90 text-emerald-900' : 'bg-slate-200 text-slate-700'
-      } uppercase tracking-wider">
-        ${isDesktop ? 'Aktif' : 'HP'}
-      </span>
+      <i class="ph-bold ${isDesktop ? 'ph-monitor' : 'ph-device-mobile'} text-lg"></i>
     </button>
   `;
 }
@@ -832,10 +870,16 @@ function renderHeaderAuth() {
   if (!currentUser) {
     if (subtext) subtext.textContent = 'Portal Transparansi Kas & Layanan Warga';
     container.innerHTML = `
-      <button onclick="openModalLoginPengurus()" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white shadow-sm flex items-center space-x-1.5 transition active:scale-95 border border-slate-700/50">
-        <i class="ph-bold ph-lock-key text-brand-300"></i>
-        <span>Login Pengurus</span>
-      </button>
+      <div class="flex items-center space-x-1.5">
+        <button onclick="openModalPapanInformasi()" title="Buka Papan Informasi & Pengumuman Warga" class="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 transition flex items-center gap-1.5 shadow-2xs active:scale-95">
+          <i class="ph-bold ph-megaphone text-amber-600"></i>
+          <span class="hidden sm:inline">Papan Info</span>
+        </button>
+        <button onclick="openModalLoginPengurus()" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white shadow-sm flex items-center space-x-1.5 transition active:scale-95 border border-slate-700/50">
+          <i class="ph-bold ph-lock-key text-brand-300"></i>
+          <span>Login Pengurus</span>
+        </button>
+      </div>
     `;
     return;
   }
@@ -851,6 +895,11 @@ function renderHeaderAuth() {
   if (subtext) subtext.textContent = `${currentUser.namaWarga || currentUser.username} • ${currentUser.role}`;
   container.innerHTML = `
     <div class="flex items-center space-x-1.5">
+      <button onclick="openModalPapanInformasi()" title="Buka Papan Informasi & Pengumuman Warga" class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 transition flex items-center gap-1 shadow-2xs active:scale-95">
+        <i class="ph-bold ph-megaphone text-amber-600"></i>
+        <span class="hidden sm:inline">Papan Info</span>
+      </button>
+
       <button onclick="openModalGantiPassword()" title="Ganti Password Saya" class="p-1.5 sm:px-2.5 sm:py-1 rounded-xl text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1 shadow-xs border border-slate-200">
         <i class="ph-bold ph-key"></i>
         <span class="hidden sm:inline">Ganti Sandi</span>
@@ -875,7 +924,7 @@ function renderHeaderAuth() {
   `;
 }
 
-// Navigasi Bawah
+// Navigasi Bawah Khusus Mode Ponsel (Icon-Only Bersih, Elegan & Ergonomis)
 function renderBottomNav() {
   const navWrapper = document.getElementById('navItemWrapper');
   if (!navWrapper) return;
@@ -890,22 +939,37 @@ function renderBottomNav() {
     { tab: 'layanan', label: 'Layanan', icon: 'ph-chat-circle-dots' }
   ];
 
-  navWrapper.className = 'grid grid-cols-6 gap-0.5 text-center';
+  if (isAdmin()) {
+    navItems.push({ tab: 'admin', label: 'Sistem', icon: 'ph-gear-six' });
+  }
+
+  const gridColsClass = navItems.length === 7 ? 'grid-cols-7' : 'grid-cols-6';
+  navWrapper.className = `grid ${gridColsClass} gap-1 text-center items-center justify-items-center`;
   navWrapper.innerHTML = navItems.map(item => {
     const isActive = activeTab === item.tab;
     const isSpecial = item.isSpecial;
     return `
-      <button onclick="switchTab('${item.tab}')" class="flex flex-col items-center justify-center py-1 rounded-2xl transition-all duration-200 relative ${
-        isActive 
-          ? (isSpecial ? 'text-emerald-700 font-black scale-105 bg-emerald-50/90 shadow-xs' : 'text-brand-700 font-black scale-105 bg-brand-50/80 shadow-xs') 
-          : (isSpecial ? 'text-emerald-700 hover:text-emerald-900 font-bold bg-emerald-50/40' : 'text-slate-500 hover:text-slate-800 font-semibold')
-      }">
-        <i class="ph-bold ${item.icon} text-xl ${isActive ? (isSpecial ? 'text-emerald-600' : 'text-brand-600') : (isSpecial ? 'text-emerald-600' : '')}"></i>
-        <span class="text-[9px] mt-0.5 tracking-tight ${isSpecial ? 'font-black text-emerald-800' : ''}">${item.label}</span>
-        ${item.count > 0 ? `
-          <span class="absolute top-0.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-          <span class="absolute top-0.5 right-1.5 w-2 h-2 rounded-full bg-rose-500"></span>
-        ` : ''}
+      <button onclick="switchTab('${item.tab}')" 
+        title="${item.label}" 
+        aria-label="${item.label}" 
+        class="w-full flex flex-col items-center justify-center py-1 transition-all duration-200 relative group active:scale-90">
+        <div class="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-2xl transition-all duration-200 relative ${
+          isActive 
+            ? (isSpecial ? 'bg-gradient-to-tr from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/35 scale-105' : 'bg-brand-600 text-white shadow-md shadow-brand-600/35 scale-105') 
+            : (isSpecial ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/80')
+        }">
+          <i class="ph-bold ${item.icon} text-[22px] sm:text-2xl"></i>
+          ${item.count > 0 ? `
+            <span class="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white shadow-xs animate-pulse">
+              ${item.count}
+            </span>
+          ` : ''}
+        </div>
+        <span class="w-1.5 h-1.5 rounded-full mt-1 transition-all duration-200 ${
+          isActive 
+            ? (isSpecial ? 'bg-emerald-600 scale-100 opacity-100' : 'bg-brand-600 scale-100 opacity-100') 
+            : 'scale-0 opacity-0'
+        }"></span>
       </button>
     `;
   }).join('');
@@ -1201,6 +1265,457 @@ function renderBeranda() {
 }
 
 // ------------------------------------------
+// Sub-Komponen Layanan: Papan Informasi & Pengumuman Bergambar (1 Warta Utama)
+// ------------------------------------------
+function renderPapanInformasiSection() {
+  const p = (db.pengumuman && db.pengumuman[0]) || (defaultPengumumanData && defaultPengumumanData[0]);
+  if (!p) return '';
+
+  return `
+    <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 flex items-center justify-center flex-shrink-0 shadow-md shadow-amber-500/20">
+            <i class="ph-bold ph-megaphone text-xl"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider font-display">Papan Informasi & Pengumuman Warga</h3>
+              <span class="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-500 text-white animate-pulse">Warta Utama</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-0.5">Transparansi keuangan, media komunikasi warga & pengurus RT 04</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2 flex-wrap">
+          ${isPengurus() ? `
+            <button onclick="openModalTambahPengumuman()" class="px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs active:scale-95">
+              <i class="ph-bold ph-note-pencil"></i>
+              <span>Ganti / Pasang Warta</span>
+            </button>
+          ` : ''}
+          <button onclick="openModalPapanInformasi()" class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95">
+            <i class="ph-bold ph-newspaper text-amber-300"></i>
+            <span>Buka Pengumuman</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Kartu Tunggal Informasi Bergambar Warga -->
+      <div onclick="openModalPapanInformasi()" class="group bg-slate-50 hover:bg-slate-100/90 rounded-2xl border border-slate-200/90 overflow-hidden shadow-2xs hover:shadow-md transition-all duration-300 cursor-pointer flex flex-col md:flex-row">
+        <div class="relative w-full md:w-80 h-44 md:h-auto bg-slate-900 overflow-hidden flex-shrink-0">
+          <img src="${p.gambar}" alt="${p.judul}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" onerror="this.style.opacity='0'">
+          <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent md:hidden"></div>
+          <div class="absolute top-3 left-3 flex items-center gap-1.5">
+            <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-brand-500 text-white shadow-xs">
+              ${p.badge || p.kategori}
+            </span>
+          </div>
+          <div class="absolute bottom-3 left-3 text-[10px] text-white/90 font-bold bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded-md">
+            📅 ${p.tanggal}
+          </div>
+        </div>
+        <div class="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3">
+          <div>
+            <div class="flex items-center gap-2 mb-1.5">
+              <span class="text-[10px] font-bold text-brand-700 uppercase tracking-wide bg-brand-50 px-2 py-0.5 rounded-md border border-brand-200/60">${p.kategori}</span>
+              <span class="text-[11px] text-slate-400 font-semibold">• ${p.penulis ? `Oleh: ${p.penulis}` : 'Pengurus RT 04'}</span>
+            </div>
+            <h4 class="text-sm sm:text-base font-black text-slate-900 group-hover:text-brand-600 transition leading-snug font-display">
+              ${p.judul}
+            </h4>
+            <p class="text-xs text-slate-600 line-clamp-2 sm:line-clamp-3 mt-2 leading-relaxed">
+              ${p.ringkasan}
+            </p>
+          </div>
+          <div class="flex items-center justify-between pt-2 border-t border-slate-200/70">
+            <div class="flex items-center gap-1.5 text-xs font-bold text-brand-700 group-hover:translate-x-0.5 transition">
+              <span>Baca Selengkapnya & Panduan Warga</span>
+              <i class="ph-bold ph-arrow-right"></i>
+            </div>
+            <button onclick="event.stopPropagation(); sharePengumumanWa('${p.id}');" class="px-2.5 py-1 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Bagikan ke WhatsApp">
+              <i class="ph-bold ph-share-network"></i>
+              <span class="hidden sm:inline">Bagikan</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ------------------------------------------
+// Helper: Format Teks Pengumuman (Bold, Heading, & Sanitasi)
+// ------------------------------------------
+function formatPengumumanText(text) {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\*([^*\n]+)\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
+}
+
+// ------------------------------------------
+// Modal Papan Informasi & Pengumuman Warga (Satu Informasi Tunggal)
+// ------------------------------------------
+function openModalPapanInformasi(targetId = null) {
+  const p = (targetId ? (db.pengumuman || []).find(x => x.id === targetId) : null)
+    || (db.pengumuman && db.pengumuman[0])
+    || (defaultPengumumanData && defaultPengumumanData[0]);
+
+  if (!p) {
+    showToast('Belum ada pengumuman warga yang diterbitkan.', 'info');
+    return;
+  }
+
+  const isAutoOpen = localStorage.getItem('satuwarga_papan_info_auto') !== 'false';
+
+  const html = `
+    <div class="space-y-4 text-left">
+      <!-- Header Papan Informasi -->
+      <div class="flex items-start justify-between pb-3 border-b border-slate-200">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 flex items-center justify-center flex-shrink-0 shadow-md shadow-amber-500/20">
+            <i class="ph-bold ph-megaphone text-xl"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">Warta Resmi RT 04</span>
+              <span class="text-[10px] text-slate-400 font-bold">Arcamanik • Bandung</span>
+            </div>
+            <h3 class="text-base font-black text-slate-900 mt-0.5 font-display">Papan Informasi & Pengumuman Warga</h3>
+          </div>
+        </div>
+        <button onclick="closeModal()" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition"><i class="ph-bold ph-x text-xl"></i></button>
+      </div>
+
+      <!-- Kartu Visual Informasi Bergambar Utama -->
+      <div class="rounded-3xl overflow-hidden bg-white border border-slate-200/90 shadow-sm space-y-0">
+        <div class="relative w-full h-52 sm:h-64 bg-slate-950 overflow-hidden group">
+          <img src="${p.gambar}" alt="${p.judul}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" onerror="this.style.opacity='0'; this.nextElementSibling.classList.remove('hidden')">
+          <div class="hidden absolute inset-0 bg-gradient-to-br from-brand-900 via-slate-900 to-teal-950 flex items-center justify-center p-6 text-center">
+            <div>
+              <i class="ph-duotone ph-megaphone text-5xl text-brand-300 mb-2"></i>
+              <p class="text-sm font-black text-white">${p.judul}</p>
+              <span class="text-xs text-brand-200 mt-1 inline-block">RT 04 / RW 14 Cisaranten Kulon</span>
+            </div>
+          </div>
+          <!-- Overlay Gradient & Headline -->
+          <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent p-4 sm:p-5 flex flex-col justify-between pointer-events-none">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-500 text-white shadow-md border border-brand-300/40">
+                ${p.badge || p.kategori}
+              </span>
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-black/50 text-slate-200 backdrop-blur-md border border-white/20">
+                📅 ${p.tanggal}
+              </span>
+            </div>
+            <div>
+              <span class="text-[10.5px] font-bold text-emerald-300 uppercase tracking-wide">
+                ${p.penulis ? `Dipublikasikan oleh: ${p.penulis}` : 'Pengurus RT 04'}
+              </span>
+              <h3 class="text-base sm:text-lg font-black text-white leading-snug mt-1 font-display drop-shadow-sm">
+                ${p.judul}
+              </h3>
+            </div>
+          </div>
+        </div>
+
+        <!-- Konten Lengkap -->
+        <div class="p-4 sm:p-5 space-y-3.5 bg-slate-50/60">
+          <div class="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium whitespace-pre-line space-y-1.5">
+            ${formatPengumumanText(p.kontenLengkap || p.ringkasan)}
+          </div>
+
+          <!-- Aksi Tombol Cepat -->
+          <div class="pt-3 border-t border-slate-200 flex items-center justify-between flex-wrap gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
+              ${p.aksiTab ? `
+                <button onclick="closeModal(); switchTab('${p.aksiTab}');" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95 flex items-center gap-1.5">
+                  <i class="ph-bold ph-arrow-right"></i>
+                  <span>${p.aksiLabel || 'Buka Layanan'}</span>
+                </button>
+              ` : ''}
+              ${p.aksiAction === 'kontak' ? `
+                <a href="https://wa.me/${appConfig.kontakRt || '6281234567890'}?text=${encodeURIComponent('Halo Pak RT Bambang, terkait pengumuman: ' + p.judul)}" target="_blank" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95 flex items-center gap-1.5">
+                  <i class="ph-bold ph-whatsapp-logo text-sm"></i>
+                  <span>Hubungi Ketua RT</span>
+                </a>
+              ` : ''}
+              <button onclick="sharePengumumanWa('${p.id}')" class="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs" title="Bagikan ke WhatsApp Warga">
+                <i class="ph-bold ph-share-network"></i>
+                <span>Bagikan ke WA</span>
+              </button>
+            </div>
+
+            ${isPengurus() ? `
+              <div class="flex items-center gap-2">
+                <button onclick="openModalTambahPengumuman()" class="px-3 py-1.5 bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs">
+                  <i class="ph-bold ph-note-pencil"></i>
+                  <span>Ganti Warta</span>
+                </button>
+                <button onclick="hapusPengumuman('${p.id}')" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition shadow-2xs flex items-center gap-1" title="Reset Pengumuman ke Standar">
+                  <i class="ph-bold ph-arrows-clockwise"></i>
+                  <span>Reset</span>
+                </button>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Modal: Opsi Auto-Open & Tombol Tutup -->
+      <div class="pt-3 border-t border-slate-200 flex items-center justify-between flex-wrap gap-2">
+        <label class="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-600 hover:text-slate-900 font-medium">
+          <input type="checkbox" id="checkAutoPapanInfo" ${isAutoOpen ? 'checked' : ''} onchange="toggleAutoPapanInfo(this.checked)" class="w-4 h-4 rounded text-brand-600 border-slate-300 focus:ring-brand-500 cursor-pointer">
+          <span>Buka otomatis setiap membuka aplikasi</span>
+        </label>
+        <button onclick="closeModal()" class="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95 flex items-center gap-1.5">
+          <span>Tutup & Jelajahi Aplikasi</span>
+          <i class="ph-bold ph-arrow-right"></i>
+        </button>
+      </div>
+    </div>
+  `;
+
+  openModal(html, 'max-w-2xl');
+}
+
+// ------------------------------------------
+// Modal Tambah / Perbarui Pengumuman (Khusus Pengurus)
+// ------------------------------------------
+function openModalTambahPengumuman() {
+  if (!isPengurus()) {
+    showToast('Hanya Pengurus RT yang dapat membuat pengumuman baru!', 'error');
+    return;
+  }
+
+  const current = (db.pengumuman && db.pengumuman[0]) || (defaultPengumumanData && defaultPengumumanData[0]) || {};
+
+  const html = `
+    <div class="space-y-4 text-left">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div>
+          <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-brand-100 text-brand-800">Warta Utama Warga</span>
+          <h3 class="text-sm font-black text-slate-900 mt-1 font-display">Pasang / Perbarui Pengumuman Warga</h3>
+          <p class="text-[11px] text-slate-400 mt-0.5">Informasi ini akan menjadi satu-satunya warta utama yang tampil di Papan Pengumuman.</p>
+        </div>
+        <button onclick="closeModal()" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"><i class="ph-bold ph-x text-lg"></i></button>
+      </div>
+
+      <form onsubmit="handleTambahPengumumanSubmit(event)" class="space-y-3">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Judul Pengumuman *</label>
+          <input type="text" id="pengumumanJudul" required value="${(current.judul || '').replace(/"/g, '&quot;')}" placeholder="Contoh: Kerja Bakti Akbar & Normalisasi Saluran" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Kategori *</label>
+            <select id="pengumumanKategori" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500">
+              <option value="Kegiatan Warga" ${current.kategori === 'Kegiatan Warga' ? 'selected' : ''}>Kegiatan Warga</option>
+              <option value="Keuangan & Iuran" ${current.kategori === 'Keuangan & Iuran' ? 'selected' : ''}>Keuangan & Iuran</option>
+              <option value="Keamanan & Ketertiban" ${current.kategori === 'Keamanan & Ketertiban' ? 'selected' : ''}>Keamanan & Ketertiban</option>
+              <option value="Administrasi Warga" ${current.kategori === 'Administrasi Warga' ? 'selected' : ''}>Administrasi Warga</option>
+              <option value="Informasi Umum" ${current.kategori === 'Informasi Umum' ? 'selected' : ''}>Informasi Umum</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Badge Khusus</label>
+            <input type="text" id="pengumumanBadge" value="${(current.badge || '').replace(/"/g, '&quot;')}" placeholder="Contoh: Prioritas, Wajib, Penting" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Penulis / Penerbit</label>
+            <input type="text" id="pengumumanPenulis" value="${(current.penulis || (currentUser ? (currentUser.namaWarga || currentUser.role) : 'Pengurus RT 04')).replace(/"/g, '&quot;')}" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Tautan Aksi Cepat</label>
+            <select id="pengumumanAksiTab" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500">
+              <option value="" ${!current.aksiTab ? 'selected' : ''}>(Tidak Ada Tombol Aksi)</option>
+              <option value="bayar" ${current.aksiTab === 'bayar' ? 'selected' : ''}>💳 Buka Bayar Iuran Online</option>
+              <option value="iuran" ${current.aksiTab === 'iuran' ? 'selected' : ''}>📑 Buka Rekap Iuran</option>
+              <option value="layanan" ${current.aksiTab === 'layanan' ? 'selected' : ''}>📄 Buka Surat Pengantar</option>
+              <option value="beranda" ${current.aksiTab === 'beranda' ? 'selected' : ''}>📅 Buka Agenda Beranda</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Pemilihan Gambar Poster -->
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Poster / Gambar Pengumuman</label>
+          <div class="space-y-2">
+            <input type="text" id="pengumumanGambarUrl" value="${(current.gambar || '').replace(/"/g, '&quot;')}" placeholder="URL Gambar (atau pilih preset/unggah di bawah)" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500">
+            
+            <!-- Preset Pilihan Cepat -->
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[10px] text-slate-400 font-bold">Preset:</span>
+              <button type="button" onclick="previewPapanImagePreset('https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?auto=format&fit=crop&w=1200&q=80')" class="px-2 py-0.5 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 text-[10px] font-bold hover:bg-teal-100">SatuWarga</button>
+              <button type="button" onclick="previewPapanImagePreset('https://images.unsplash.com/photo-1558008258-325660e3d823?auto=format&fit=crop&w=900&q=80')" class="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold hover:bg-emerald-100">Kerja Bakti</button>
+              <button type="button" onclick="previewPapanImagePreset('https://images.unsplash.com/photo-1556742049-0a67c5574f73?auto=format&fit=crop&w=900&q=80')" class="px-2 py-0.5 rounded-lg bg-brand-50 text-brand-800 border border-brand-200 text-[10px] font-bold hover:bg-brand-100">Iuran QRIS</button>
+              <button type="button" onclick="previewPapanImagePreset('https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=900&q=80')" class="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold hover:bg-amber-100">Keamanan</button>
+              <button type="button" onclick="previewPapanImagePreset('https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=900&q=80')" class="px-2 py-0.5 rounded-lg bg-sky-50 text-sky-800 border border-sky-200 text-[10px] font-bold hover:bg-sky-100">Surat Pengantar</button>
+            </div>
+
+            <!-- Upload File Gambar -->
+            <div class="flex items-center space-x-2 pt-1">
+              <label class="cursor-pointer px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs border border-slate-200">
+                <i class="ph-bold ph-upload-simple"></i>
+                <span>Unggah Foto dari HP / Laptop</span>
+                <input type="file" accept="image/*" onchange="handlePapanImageUpload(event)" class="hidden">
+              </label>
+              <span id="pengumumanUploadStatus" class="text-[11px] text-slate-400 font-medium"></span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Ringkasan Singkat *</label>
+          <input type="text" id="pengumumanRingkasan" required value="${(current.ringkasan || '').replace(/"/g, '&quot;')}" placeholder="1-2 kalimat ringkasan untuk kartu informasi" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Isi Lengkap Pengumuman *</label>
+          <textarea id="pengumumanKonten" rows="4" required placeholder="Tuliskan detail pengumuman, waktu, tempat, dan instruksi warga..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 leading-relaxed">${(current.kontenLengkap || current.ringkasan || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 flex items-center justify-end space-x-2">
+          <button type="button" onclick="openModalPapanInformasi()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition">Batal</button>
+          <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-black shadow-md transition active:scale-95 flex items-center gap-1.5">
+            <i class="ph-bold ph-paper-plane-tilt"></i>
+            <span>Simpan & Pasang Pengumuman</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  openModal(html, 'max-w-xl');
+}
+
+function previewPapanImagePreset(url) {
+  const input = document.getElementById('pengumumanGambarUrl');
+  if (input) input.value = url;
+  const status = document.getElementById('pengumumanUploadStatus');
+  if (status) status.textContent = 'Preset gambar terpilih!';
+}
+
+function handlePapanImageUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const status = document.getElementById('pengumumanUploadStatus');
+  if (status) status.textContent = 'Memproses foto...';
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const MAX_WIDTH = 900;
+      const MAX_HEIGHT = 600;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width *= MAX_HEIGHT / height;
+          height = MAX_HEIGHT;
+        }
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      const base64 = canvas.toDataURL('image/jpeg', 0.8);
+      const input = document.getElementById('pengumumanGambarUrl');
+      if (input) input.value = base64;
+      if (status) status.textContent = 'Foto berhasil diproses!';
+    };
+    img.src = evt.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleTambahPengumumanSubmit(e) {
+  e.preventDefault();
+  const judul = document.getElementById('pengumumanJudul').value.trim();
+  const kategori = document.getElementById('pengumumanKategori').value;
+  const badge = document.getElementById('pengumumanBadge').value.trim() || kategori;
+  const penulis = document.getElementById('pengumumanPenulis').value.trim() || 'Pengurus RT 04';
+  const aksiTab = document.getElementById('pengumumanAksiTab').value;
+  const gambarUrl = document.getElementById('pengumumanGambarUrl').value.trim() || 'https://images.unsplash.com/photo-1558008258-325660e3d823?auto=format&fit=crop&w=900&q=80';
+  const ringkasan = document.getElementById('pengumumanRingkasan').value.trim();
+  const konten = document.getElementById('pengumumanKonten').value.trim();
+
+  if (!judul || !ringkasan || !konten) {
+    showToast('Mohon lengkapi judul, ringkasan, dan isi pengumuman!', 'error');
+    return;
+  }
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const newId = 'P' + Date.now().toString().slice(-4);
+  const newItem = {
+    id: newId,
+    judul: judul,
+    kategori: kategori,
+    badge: badge,
+    tanggal: todayStr,
+    penulis: penulis,
+    gambar: gambarUrl,
+    ringkasan: ringkasan,
+    kontenLengkap: konten,
+    aksiLabel: aksiTab === 'bayar' ? '💳 Bayar Iuran Online' : (aksiTab === 'layanan' ? '📄 Buat Surat Pengantar' : (aksiTab === 'iuran' ? '📑 Buka Rekap Iuran' : 'Lihat Layanan')),
+    aksiTab: aksiTab || ''
+  };
+
+  // Papan Pengumuman menampilkan strictly 1 informasi utama
+  db.pengumuman = [newItem];
+  saveLocalStorageData();
+  logEvent('PENGUMUMAN', `Pengumuman aktif diperbarui: "${judul}" (${kategori})`, 'info');
+  triggerConfetti();
+  showToast(`Pengumuman "${judul}" berhasil dipasang!`);
+  renderApp();
+  openModalPapanInformasi();
+}
+
+function hapusPengumuman(id) {
+  if (!isPengurus()) {
+    showToast('Hanya Pengurus RT yang dapat mereset pengumuman!', 'error');
+    return;
+  }
+  const item = (db.pengumuman || []).find(p => p.id === id) || (db.pengumuman && db.pengumuman[0]);
+  const judul = item ? item.judul : 'Pengumuman';
+
+  if (!confirm(`Yakin ingin mereset pengumuman "${judul}" kembali ke warta standar RT?`)) return;
+
+  db.pengumuman = [...defaultPengumumanData];
+  saveLocalStorageData();
+  logEvent('PENGUMUMAN', `Pengumuman dikembalikan ke warta standar RT`, 'warning');
+  showToast('Pengumuman berhasil direset ke warta standar!');
+  renderApp();
+  openModalPapanInformasi();
+}
+
+function sharePengumumanWa(id) {
+  const p = (db.pengumuman || []).find(item => item.id === id) || (db.pengumuman && db.pengumuman[0]) || (defaultPengumumanData && defaultPengumumanData[0]);
+  if (!p) return;
+  const teks = `📢 *PENGUMUMAN RESMI RT 04 / RW 14 CISARANTEN KULON*\n\n*${p.judul}*\nKategori: ${p.kategori} (${p.tanggal})\nOleh: ${p.penulis || 'Pengurus RT 04'}\n\n${p.ringkasan}\n\n${p.kontenLengkap}\n\n---\n*SatuWarga 04* - Sistem Transparansi & Layanan Warga RT 04`;
+  window.open(`https://wa.me/?text=${encodeURIComponent(teks)}`, '_blank');
+}
+
+function toggleAutoPapanInfo(checked) {
+  localStorage.setItem('satuwarga_papan_info_auto', checked ? 'true' : 'false');
+  showToast(checked ? 'Papan Informasi akan otomatis terbuka saat aplikasi dibuka.' : 'Pop-up otomatis Papan Informasi dinonaktifkan.', 'info');
+}
+
+// ------------------------------------------
 // Sub-Komponen Dashboard: Demografi & Kependudukan RT 04
 // ------------------------------------------
 function renderDashboardKependudukanSection() {
@@ -1212,7 +1727,7 @@ function renderDashboardKependudukanSection() {
   const pctKontrak = totalKK > 0 ? Math.round((kontrakCount / totalKK) * 100) : 0;
   const avgJiwa = totalKK > 0 ? (totalJiwa / totalKK).toFixed(1) : '0.0';
 
-  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10'];
+  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
   const blokData = blokNames.map(b => ({
     nama: b,
     count: db.warga.filter(w => w.noRumah && (w.noRumah.includes(b) || (b === 'Ciskul I' && /\bCiskul 1\b/i.test(w.noRumah)))).length
@@ -1316,10 +1831,10 @@ function renderDashboardKependudukanSection() {
                 <i class="ph-bold ph-chart-bar text-sky-600"></i>
                 Sebaran KK per Blok Jalan
               </h4>
-              <p class="text-[10px] text-slate-400">Distribusi wilayah Ciskul I s.d. Ciskul 10</p>
+              <p class="text-[10px] text-slate-400">Distribusi wilayah Ciskul & Gemani</p>
             </div>
             <span class="text-[9px] font-black px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 border border-sky-200">
-              6 Blok
+              7 Blok
             </span>
           </div>
           <div class="relative w-full h-44">
@@ -4746,13 +5261,35 @@ function normalizeBlok(b) {
   if (!b) return '';
   let s = String(b).trim();
   if (/^ciskul\s*1$/i.test(s) || /^ciskul\s*i$/i.test(s)) return 'Ciskul I';
+  if (/^gemani$/i.test(s)) return 'Gemani';
   return s;
 }
 
+function extractBlokFromAddress(addr) {
+  if (!addr) return '';
+  const s = String(addr).trim();
+  if (/^gemani\b/i.test(s)) return 'Gemani';
+  if (/^ciskul\s*(i|1)\b/i.test(s)) return 'Ciskul I';
+  const m = s.match(/^(ciskul\s*\d+)/i);
+  if (m) {
+    const num = m[1].replace(/ciskul\s*/i, '').trim();
+    return `Ciskul ${num}`;
+  }
+  const parts = s.split(/\s+/);
+  return parts.length >= 2 && /^ciskul/i.test(parts[0]) ? `${parts[0]} ${parts[1]}` : parts[0];
+}
+
 function extractHouseNumber(noStr) {
-  if (!noStr) return null;
-  const m = String(noStr).match(/\d+/);
-  return m ? parseInt(m[0], 10) : null;
+  if (noStr === null || noStr === undefined) return null;
+  const s = String(noStr).trim();
+  if (!s) return null;
+  const mNo = s.match(/(?:no\.?|nomor)\s*(\d+)/i);
+  if (mNo) return parseInt(mNo[1], 10);
+  const allNums = s.match(/\d+/g);
+  if (allNums && allNums.length > 0) {
+    return parseInt(allNums[allNums.length - 1], 10);
+  }
+  return null;
 }
 
 function isSameNoRumah(addr1, addr2) {
@@ -4761,12 +5298,10 @@ function isSameNoRumah(addr1, addr2) {
   const a2 = String(addr2).trim();
   if (a1.toLowerCase() === a2.toLowerCase()) return true;
 
-  const parts1 = a1.split(/\s+/);
-  const parts2 = a2.split(/\s+/);
-  const blok1 = normalizeBlok(parts1.slice(0, 2).join(' ')).toLowerCase();
-  const blok2 = normalizeBlok(parts2.slice(0, 2).join(' ')).toLowerCase();
-  const num1 = extractHouseNumber(parts1.slice(2).join(' ') || a1);
-  const num2 = extractHouseNumber(parts2.slice(2).join(' ') || a2);
+  const blok1 = extractBlokFromAddress(a1).toLowerCase();
+  const blok2 = extractBlokFromAddress(a2).toLowerCase();
+  const num1 = extractHouseNumber(a1);
+  const num2 = extractHouseNumber(a2);
 
   return blok1 === blok2 && num1 !== null && num1 === num2;
 }
@@ -4778,9 +5313,8 @@ function findWargaByAddress(blok, no) {
 
   return db.warga.find(w => {
     if (!w.noRumah) return false;
-    const parts = w.noRumah.trim().split(/\s+/);
-    const wBlok = normalizeBlok(parts.slice(0, 2).join(' ')).toLowerCase();
-    const wNum = extractHouseNumber(parts.slice(2).join(' ') || w.noRumah);
+    const wBlok = extractBlokFromAddress(w.noRumah).toLowerCase();
+    const wNum = extractHouseNumber(w.noRumah);
     return wBlok === targetBlok && wNum === targetNum;
   });
 }
@@ -4791,8 +5325,7 @@ function getRegisteredWargaInBlok(blok) {
 
   return db.warga.filter(w => {
     if (!w.noRumah) return false;
-    const parts = w.noRumah.trim().split(/\s+/);
-    const wBlok = normalizeBlok(parts.slice(0, 2).join(' ')).toLowerCase();
+    const wBlok = extractBlokFromAddress(w.noRumah).toLowerCase();
     return wBlok === targetBlok;
   });
 }
@@ -4814,9 +5347,9 @@ function renderSensusNoRumahOptionsHtml(blok, selectedNo) {
     const w = findWargaByAddress(blok, i);
     const isSel = selectedNum === i;
     if (w) {
-      list.push(`<option value="${val}" ${isSel ? 'selected' : ''} class="bg-rose-100 text-rose-800 font-bold" style="background-color:#fee2e2; color:#b91c1c; font-weight:bold;">⛔ No. ${i} [TERDAFTAR: ${w.nama}]</option>`);
+      list.push(`<option value="${val}" ${isSel ? 'selected' : ''} class="bg-rose-100 text-rose-900 font-extrabold" style="background-color:#ffe4e6; color:#9f1239; font-weight:800;">⛔ No. ${i} • SUDAH TERDAFTAR [KK: ${w.nama} - ${w.status}]</option>`);
     } else {
-      list.push(`<option value="${val}" ${isSel ? 'selected' : ''}>No. ${i} (Tersedia)</option>`);
+      list.push(`<option value="${val}" ${isSel ? 'selected' : ''} class="bg-emerald-50 text-emerald-900 font-bold" style="background-color:#ecfdf5; color:#065f46; font-weight:700;">🟢 No. ${i} • TERSEDIA (Siap Didaftarkan)</option>`);
     }
   }
   return list.join('');
@@ -4830,25 +5363,53 @@ function renderSensusGridRumahHtml(blok, selectedNo) {
     const isSel = selectedNum === i;
 
     if (w) {
+      // HIGHLIGHT SUDAH TERDAFTAR (Merah High-Contrast)
       tiles.push(`
-        <button type="button" onclick="selectSensusHouseFromGrid(${i})" title="No. ${i}: Terdaftar a.n. ${w.nama} (${w.status})" class="p-1.5 rounded-xl text-center text-[10.5px] font-black transition shadow-2xs border ${isSel ? 'bg-rose-600 ring-2 ring-amber-400 text-white scale-105 z-10' : 'bg-rose-500 hover:bg-rose-600 text-white border-rose-600 ring-1 ring-rose-300'} flex flex-col items-center justify-center min-h-[38px] cursor-pointer">
-          <span class="leading-none">${i}</span>
-          <span class="text-[8px] font-black text-rose-100 uppercase mt-0.5">Terisi</span>
+        <button type="button" onclick="selectSensusHouseFromGrid(${i})" 
+          title="No. ${i} • SUDAH TERDAFTAR: KK ${w.nama} (${w.status}, ${w.anggota || 1} Jiwa)" 
+          class="p-1 rounded-xl text-center transition-all duration-200 shadow-sm border ${
+            isSel 
+              ? 'bg-rose-700 ring-4 ring-amber-400 text-white scale-110 z-20 border-rose-300 shadow-lg' 
+              : 'bg-gradient-to-b from-rose-600 via-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white border-rose-500 hover:shadow-md'
+          } flex flex-col items-center justify-center min-h-[44px] cursor-pointer relative group">
+          <span class="flex items-center gap-0.5 text-[11px] sm:text-xs font-black leading-none">
+            <i class="ph-bold ph-lock-key text-[10px] text-rose-200"></i>
+            <span>${i}</span>
+          </span>
+          <span class="text-[7px] font-black uppercase tracking-tight bg-rose-950/70 px-1 py-0.2 rounded text-rose-100 mt-1 scale-95 group-hover:scale-100 transition shadow-2xs">
+            TERDAFTAR
+          </span>
+          <span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 border border-rose-800 animate-pulse"></span>
         </button>
       `);
     } else {
+      // DITANDAI DENGAN TERSEDIA (Hijau Bersih & Rapi)
       if (isSel) {
         tiles.push(`
-          <button type="button" onclick="selectSensusHouseFromGrid(${i})" title="No. ${i}: Tersedia (Sedang Dipilih)" class="p-1.5 rounded-xl text-center text-[10.5px] font-black transition shadow-2xs border bg-amber-500 text-white border-amber-600 ring-2 ring-amber-400 scale-105 z-10 flex flex-col items-center justify-center min-h-[38px] cursor-pointer">
-            <span class="leading-none">${i}</span>
-            <span class="text-[8px] font-black text-amber-100 uppercase mt-0.5">Pilih</span>
+          <button type="button" onclick="selectSensusHouseFromGrid(${i})" 
+            title="No. ${i}: TERSEDIA (Sedang Dipilih)" 
+            class="p-1 rounded-xl text-center text-[11px] sm:text-xs font-black transition-all duration-200 shadow-md border bg-gradient-to-b from-emerald-600 to-teal-700 text-white border-emerald-400 ring-4 ring-amber-400 scale-110 z-20 flex flex-col items-center justify-center min-h-[44px] cursor-pointer">
+            <span class="flex items-center gap-0.5 leading-none">
+              <i class="ph-bold ph-check-circle text-[10px] text-emerald-200"></i>
+              <span>${i}</span>
+            </span>
+            <span class="text-[7px] font-black uppercase tracking-tight bg-emerald-950/70 px-1 py-0.2 rounded text-emerald-100 mt-1">
+              TERSEDIA
+            </span>
           </button>
         `);
       } else {
         tiles.push(`
-          <button type="button" onclick="selectSensusHouseFromGrid(${i})" title="No. ${i}: Tersedia untuk pendaftaran baru" class="p-1.5 rounded-xl text-center text-[10.5px] font-semibold transition shadow-2xs border bg-white hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-300 text-slate-700 border-slate-200/90 flex flex-col items-center justify-center min-h-[38px] active:scale-95 cursor-pointer">
-            <span class="leading-none">${i}</span>
-            <span class="text-[8px] font-medium text-slate-400 mt-0.5">Siap</span>
+          <button type="button" onclick="selectSensusHouseFromGrid(${i})" 
+            title="No. ${i}: TERSEDIA untuk pendaftaran baru" 
+            class="p-1 rounded-xl text-center text-[11px] sm:text-xs font-bold transition shadow-2xs border bg-emerald-50/50 hover:bg-emerald-100/80 hover:text-emerald-950 hover:border-emerald-400 text-slate-800 border-emerald-200/90 flex flex-col items-center justify-center min-h-[44px] active:scale-95 cursor-pointer hover:shadow-xs group">
+            <span class="flex items-center gap-0.5 leading-none font-extrabold text-slate-800 group-hover:text-emerald-900">
+              <i class="ph-bold ph-check text-[9px] text-emerald-600"></i>
+              <span>${i}</span>
+            </span>
+            <span class="text-[7px] font-black uppercase tracking-tight text-emerald-700 bg-emerald-100/90 border border-emerald-200/90 px-1 py-0.2 rounded mt-1 group-hover:bg-emerald-600 group-hover:text-white transition shadow-2xs">
+              TERSEDIA
+            </span>
           </button>
         `);
       }
@@ -4861,20 +5422,27 @@ function renderSensusRegisteredChipsHtml(blok) {
   const registered = getRegisteredWargaInBlok(blok);
   if (registered.length === 0) {
     return `
-      <div class="w-full text-center py-2 text-[11px] text-slate-400 font-medium bg-white/70 rounded-xl border border-dashed border-slate-200">
+      <div class="w-full text-center py-2.5 text-[11px] text-slate-400 font-medium bg-white/70 rounded-xl border border-dashed border-slate-200">
         Belum ada nomor rumah yang terdaftar di blok ini. Semua nomor (1-70) tersedia untuk didaftarkan.
       </div>
     `;
   }
-  return registered.map(w => `
-    <button type="button" onclick="selectSensusHouseFromGrid(${extractHouseNumber(w.noRumah)})" title="Klik untuk cek nomor ini" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-[11px] font-bold shadow-2xs transition active:scale-95">
-      <i class="ph-bold ph-house-line text-rose-600 text-xs"></i>
-      <span>${w.noRumah}</span>
-      <span class="text-rose-300 font-normal">•</span>
-      <span class="text-rose-950 font-black truncate max-w-[150px]">${w.nama}</span>
-      <span class="px-1.5 py-0.2 bg-rose-200/80 text-rose-900 rounded text-[9px] uppercase">${w.status}</span>
-    </button>
-  `).join('');
+  const sorted = [...registered].sort((a, b) => (extractHouseNumber(a.noRumah) || 0) - (extractHouseNumber(b.noRumah) || 0));
+  return sorted.map(w => {
+    const num = extractHouseNumber(w.noRumah);
+    return `
+      <button type="button" onclick="selectSensusHouseFromGrid(${num})" 
+        title="Klik untuk sorot No. ${num}: ${w.nama} (${w.status})" 
+        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gradient-to-r from-rose-50 to-red-50 hover:from-rose-100 hover:to-red-100 text-rose-950 border border-rose-300 text-[11px] font-bold shadow-2xs transition active:scale-95 group">
+        <span class="px-1.5 py-0.5 rounded-md bg-rose-600 text-white font-black text-[10px] flex items-center gap-1 shadow-2xs">
+          <i class="ph-bold ph-lock-key"></i>
+          <span>No. ${num}</span>
+        </span>
+        <span class="text-rose-950 font-black truncate max-w-[140px]">${w.nama}</span>
+        <span class="px-1.5 py-0.2 bg-rose-200/90 text-rose-900 rounded text-[9px] font-black uppercase">${w.status}</span>
+      </button>
+    `;
+  }).join('');
 }
 
 function renderSensusRumahStatusHtml(blok, noStr) {
@@ -4891,8 +5459,8 @@ function renderSensusRumahStatusHtml(blok, noStr) {
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <p class="text-xs font-black text-rose-950 uppercase tracking-wide">Nomor Rumah Sudah Digunakan (Input Data Ditolak)</p>
-              <span class="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-200 text-rose-800">Tertolak</span>
+              <p class="text-xs font-black text-rose-950 uppercase tracking-wide">Nomor Rumah Sudah Terdaftar (Input Data Ditolak)</p>
+              <span class="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-200 text-rose-800">Sudah Terdaftar</span>
             </div>
             <p class="text-[11px] text-rose-800 mt-1 leading-relaxed">
               Alamat <b>${alamatLengkap}</b> telah terdaftar dalam sistem atas nama KK <b>${w.nama}</b> (${w.status}, ${w.anggota || 1} Jiwa). 
@@ -4950,7 +5518,7 @@ function selectSensusHouseFromGrid(num) {
 
   const w = findWargaByAddress(blok, targetVal);
   if (w) {
-    showToast(`Perhatian: Nomor rumah ${blok} ${targetVal} sudah digunakan oleh ${w.nama}!`, 'warning');
+    showToast(`Perhatian: Nomor rumah ${blok} ${targetVal} sudah terdaftar atas nama KK ${w.nama}!`, 'warning');
   } else {
     showToast(`Nomor rumah ${blok} ${targetVal} dipilih dan siap didaftarkan.`, 'info');
   }
@@ -4984,6 +5552,242 @@ function updateSensusUI() {
 
   const gridContainer = document.getElementById('sensusGridNomorRumah');
   if (gridContainer) gridContainer.innerHTML = renderSensusGridRumahHtml(blok, no);
+}
+
+// Modal Rekap Seluruh Nomor Rumah (Sudah Terdaftar & Tersedia) di RT 04
+function openModalSemuaRumahTerpakai(filterBlok = 'semua', filterStatus = 'semua') {
+  const blokList = ['semua', 'Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
+  const realBlokList = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
+  
+  const allUsed = [...(db.warga || [])].filter(w => w.noRumah && w.noRumah !== '-');
+  allUsed.sort((a, b) => {
+    const blokA = extractBlokFromAddress(a.noRumah).toLowerCase();
+    const blokB = extractBlokFromAddress(b.noRumah).toLowerCase();
+    if (blokA !== blokB) return blokA.localeCompare(blokB);
+    return (extractHouseNumber(a.noRumah) || 0) - (extractHouseNumber(b.noRumah) || 0);
+  });
+
+  const targetBloks = filterBlok === 'semua' ? realBlokList : [filterBlok];
+
+  // Hitung jumlah Sudah Terdaftar dan Tersedia untuk blok yang aktif
+  let usedInScope = 0;
+  let availInScope = 0;
+  targetBloks.forEach(b => {
+    const regCount = getRegisteredWargaInBlok(b).length;
+    usedInScope += regCount;
+    availInScope += (70 - regCount);
+  });
+
+  // Susun data item (Sudah Terdaftar / Tersedia)
+  const displayedItems = [];
+  targetBloks.forEach(b => {
+    for (let i = 1; i <= 70; i++) {
+      const w = findWargaByAddress(b, i);
+      const isUsed = !!w;
+      if ((filterStatus === 'terpakai' || filterStatus === 'terdaftar') && !isUsed) continue;
+      if (filterStatus === 'tersedia' && isUsed) continue;
+
+      displayedItems.push({
+        blok: b,
+        no: i,
+        isUsed: isUsed,
+        warga: w
+      });
+    }
+  });
+
+  const html = `
+    <div class="space-y-4 text-left">
+      <!-- Header -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 via-brand-600 to-slate-900 text-white flex items-center justify-center flex-shrink-0 shadow-md">
+            <i class="ph-bold ph-house-line text-xl"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="text-sm font-black text-slate-900 font-display">Peta Penomoran Rumah RT 04</h3>
+              <span class="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-rose-100 text-rose-800 border border-rose-300">
+                ⛔ ${usedInScope} Sudah Terdaftar
+              </span>
+              <span class="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                🟢 ${availInScope} Tersedia
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-0.5">Nomor rumah yang sudah terdaftar di-highlight merah, nomor yang belum terpakai ditandai hijau (tersedia).</p>
+          </div>
+        </div>
+        <button onclick="closeModal()" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Quick Search Bar -->
+      <div class="relative">
+        <i class="ph-bold ph-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <input type="text" id="filterModalRumahQuery" oninput="filterModalRumahTerpakai()" placeholder="Cari nama warga, nomor rumah, blok, atau ketik 'tersedia' / 'terdaftar'..." class="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+
+      <!-- Filter Kategori Status: Semua, Sudah Terdaftar, Tersedia -->
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <span class="text-[10.5px] font-black text-slate-500 uppercase tracking-wider mr-1">Status:</span>
+        <button onclick="openModalSemuaRumahTerpakai('${filterBlok}', 'semua')" class="px-3 py-1 rounded-xl text-[10.5px] font-black transition flex items-center gap-1.5 ${
+          filterStatus === 'semua'
+            ? 'bg-slate-900 text-white shadow-xs'
+            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+        }">
+          <span>Semua Status (${usedInScope + availInScope})</span>
+        </button>
+        <button onclick="openModalSemuaRumahTerpakai('${filterBlok}', 'terdaftar')" class="px-3 py-1 rounded-xl text-[10.5px] font-black transition flex items-center gap-1.5 ${
+          filterStatus === 'terdaftar' || filterStatus === 'terpakai'
+            ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-300'
+            : 'bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100'
+        }">
+          <i class="ph-bold ph-lock-key"></i>
+          <span>⛔ Sudah Terdaftar (${usedInScope})</span>
+        </button>
+        <button onclick="openModalSemuaRumahTerpakai('${filterBlok}', 'tersedia')" class="px-3 py-1 rounded-xl text-[10.5px] font-black transition flex items-center gap-1.5 ${
+          filterStatus === 'tersedia'
+            ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-300'
+            : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+        }">
+          <i class="ph-bold ph-check"></i>
+          <span>🟢 Tersedia (${availInScope})</span>
+        </button>
+      </div>
+
+      <!-- Filter Tabs per Blok -->
+      <div class="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none pt-1 border-t border-slate-100">
+        ${blokList.map(b => {
+          const count = b === 'semua' 
+            ? allUsed.length 
+            : allUsed.filter(w => extractBlokFromAddress(w.noRumah).toLowerCase() === b.toLowerCase()).length;
+          const isAct = filterBlok === b;
+          return `
+            <button onclick="openModalSemuaRumahTerpakai('${b}', '${filterStatus}')" class="px-2.5 py-1 rounded-xl text-[10.5px] font-extrabold whitespace-nowrap transition flex items-center gap-1 ${
+              isAct 
+                ? 'bg-brand-600 text-white shadow-xs' 
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }">
+              <span>${b === 'semua' ? 'Semua Blok' : b}</span>
+              <span class="px-1 py-0.2 rounded-md ${isAct ? 'bg-brand-800 text-white' : 'bg-white text-slate-700'} text-[9px]">${b === 'semua' ? `${count} terisi` : `${count}/70`}</span>
+            </button>
+          `;
+        }).join('')}
+      </div>
+
+      <!-- Grid / List Daftar Rumah -->
+      <div id="modalRumahTerpakaiList" class="space-y-2 max-h-[52vh] overflow-y-auto pr-1">
+        ${displayedItems.length === 0 ? `
+          <div class="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500">
+            Tidak ada nomor rumah yang sesuai dengan filter ini.
+          </div>
+        ` : displayedItems.map(item => {
+          if (item.isUsed && item.warga) {
+            const w = item.warga;
+            return `
+              <div class="p-3 bg-rose-50/70 hover:bg-rose-100/70 rounded-2xl border-2 border-rose-300 transition flex items-center justify-between gap-3 group shadow-2xs">
+                <div class="flex items-center space-x-3 min-w-0">
+                  <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-rose-600 to-red-700 text-white flex flex-col items-center justify-center flex-shrink-0 shadow-sm border border-rose-400">
+                    <i class="ph-bold ph-lock-key text-xs"></i>
+                    <span class="text-[10px] font-black leading-none mt-0.5">No. ${item.no}</span>
+                  </div>
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span class="px-2 py-0.5 rounded-md bg-rose-600 text-white text-[9.5px] font-black tracking-wider uppercase shadow-2xs">
+                        SUDAH TERDAFTAR • ${item.blok} No. ${item.no}
+                      </span>
+                      <span class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${w.status === 'Tetap' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'}">
+                        ${w.status}
+                      </span>
+                      <span class="text-[10px] text-slate-500 font-semibold">${w.anggota || 1} Jiwa</span>
+                    </div>
+                    <h4 class="text-xs font-black text-slate-900 truncate mt-0.5">${w.nama}</h4>
+                    <p class="text-[10.5px] text-slate-500 truncate">${w.pekerjaan || 'Warga RT'} • ${w.agama || 'Islam'}</p>
+                  </div>
+                </div>
+
+                <div class="flex items-center space-x-1.5 flex-shrink-0">
+                  <button onclick="pilihDanSorotRumahDiSensus('${item.blok}', ${item.no})" title="Buka dan sorot di peta e-Sensus" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[10.5px] font-bold rounded-xl transition flex items-center gap-1 shadow-xs active:scale-95">
+                    <i class="ph-bold ph-crosshair"></i>
+                    <span>Sorot di Sensus</span>
+                  </button>
+                </div>
+              </div>
+            `;
+          } else {
+            return `
+              <div class="p-3 bg-emerald-50/50 hover:bg-emerald-100/70 rounded-2xl border border-emerald-200 transition flex items-center justify-between gap-3 group shadow-2xs">
+                <div class="flex items-center space-x-3 min-w-0">
+                  <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex flex-col items-center justify-center flex-shrink-0 shadow-sm border border-emerald-400">
+                    <i class="ph-bold ph-check text-xs"></i>
+                    <span class="text-[10px] font-black leading-none mt-0.5">No. ${item.no}</span>
+                  </div>
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span class="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[9.5px] font-black tracking-wider uppercase shadow-2xs">
+                        TERSEDIA • ${item.blok} No. ${item.no}
+                      </span>
+                      <span class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-emerald-100 text-emerald-900 border border-emerald-300">
+                        Siap Huni
+                      </span>
+                    </div>
+                    <h4 class="text-xs font-bold text-slate-700 truncate mt-0.5">Nomor rumah belum digunakan</h4>
+                    <p class="text-[10.5px] text-emerald-700 font-medium">Tersedia untuk pendaftaran KK baru di e-Sensus</p>
+                  </div>
+                </div>
+
+                <div class="flex items-center space-x-1.5 flex-shrink-0">
+                  <button onclick="pilihDanSorotRumahDiSensus('${item.blok}', ${item.no})" title="Gunakan nomor ini untuk pendaftaran e-Sensus" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] font-bold rounded-xl transition flex items-center gap-1 shadow-xs active:scale-95">
+                    <i class="ph-bold ph-check-circle"></i>
+                    <span>Pilih Nomor Ini</span>
+                  </button>
+                </div>
+              </div>
+            `;
+          }
+        }).join('')}
+      </div>
+
+      <div class="pt-2 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+        <span>Total: <b>${displayedItems.length}</b> nomor rumah (${filterBlok === 'semua' ? 'Semua Blok' : filterBlok})</span>
+        <button onclick="closeModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition">Tutup</button>
+      </div>
+    </div>
+  `;
+  openModal(html, 'max-w-2xl');
+}
+
+function filterModalRumahTerpakai() {
+  const input = document.getElementById('filterModalRumahQuery');
+  const listEl = document.getElementById('modalRumahTerpakaiList');
+  if (!input || !listEl) return;
+  const q = input.value.toLowerCase().trim();
+
+  const allCards = listEl.children;
+  for (let card of allCards) {
+    const text = card.textContent.toLowerCase();
+    card.style.display = text.includes(q) ? 'flex' : 'none';
+  }
+}
+
+function pilihDanSorotRumahDiSensus(blok, num) {
+  closeModal();
+  subTabWarga = 'sensus';
+  renderApp();
+  
+  setTimeout(() => {
+    const blokEl = document.getElementById('sensusBlok');
+    if (blokEl) {
+      blokEl.value = blok;
+      onSensusBlokChange();
+    }
+    setTimeout(() => {
+      selectSensusHouseFromGrid(num);
+      const targetEl = document.getElementById('sensusRumahStatusContainer') || document.getElementById('sensusNoRumah');
+      if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+  }, 100);
 }
 
 function getFilteredWargaList() {
@@ -5020,10 +5824,12 @@ function renderWargaCardsHtml(filteredList) {
                 ${w.status}
               </span>
             </div>
-            <p class="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
-              <span class="flex items-center gap-1"><i class="ph-bold ph-house-line text-brand-600"></i> ${w.noRumah}</span>
-              <span>•</span>
-              <span class="flex items-center gap-1"><i class="ph-bold ph-briefcase text-slate-500"></i> ${w.pekerjaan || 'Karyawan'}</span>
+            <p class="text-[11px] text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-50 text-rose-900 border border-rose-200 font-extrabold text-[11px] shadow-2xs">
+                <i class="ph-bold ph-house-line text-rose-600"></i>
+                <span>${w.noRumah}</span>
+              </span>
+              <span class="flex items-center gap-1 text-slate-600"><i class="ph-bold ph-briefcase text-slate-400"></i> ${w.pekerjaan || 'Karyawan'}</span>
             </p>
           </div>
           <div class="flex items-center space-x-1 flex-shrink-0">
@@ -5150,8 +5956,8 @@ function renderWarga() {
 
       ${subTabWarga === 'direktori' ? `
         <div class="space-y-3">
-          <!-- 2 Metrik Cepat -->
-          <div class="grid grid-cols-2 gap-2.5">
+          <!-- 3 Metrik Cepat -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <div class="bg-gradient-to-br from-brand-600 to-teal-700 text-white p-3 rounded-2xl shadow-xs">
               <span class="text-[9.5px] font-black uppercase text-emerald-100">Total KK</span>
               <p class="text-base font-black mt-0.5">${db.warga.length} KK</p>
@@ -5160,6 +5966,13 @@ function renderWarga() {
               <span class="text-[9.5px] font-black uppercase text-purple-100">Tetap / Kontrak</span>
               <p class="text-base font-black mt-0.5">${tetapCount} / ${kontrakCount}</p>
             </div>
+            <button onclick="openModalSemuaRumahTerpakai()" class="bg-gradient-to-br from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 text-white p-3 rounded-2xl shadow-xs text-left transition active:scale-95 group">
+              <div class="flex items-center justify-between">
+                <span class="text-[9.5px] font-black uppercase text-rose-100">Rumah Terdaftar</span>
+                <i class="ph-bold ph-arrow-square-out text-rose-200 group-hover:scale-125 transition"></i>
+              </div>
+              <p class="text-base font-black mt-0.5">${db.warga.length} Rumah (Cek Rekap)</p>
+            </button>
           </div>
 
           <!-- Search & Filter Bar -->
@@ -5185,6 +5998,7 @@ function renderWarga() {
                 <option value="Ciskul 8" ${wargaFilterBlok === 'Ciskul 8' ? 'selected' : ''}>Blok Ciskul 8</option>
                 <option value="Ciskul 9" ${wargaFilterBlok === 'Ciskul 9' ? 'selected' : ''}>Blok Ciskul 9</option>
                 <option value="Ciskul 10" ${wargaFilterBlok === 'Ciskul 10' ? 'selected' : ''}>Blok Ciskul 10</option>
+                <option value="Gemani" ${wargaFilterBlok === 'Gemani' ? 'selected' : ''}>Blok Gemani</option>
               </select>
             </div>
           </div>
@@ -5255,6 +6069,7 @@ function renderWarga() {
                   <option value="Ciskul 8">Ciskul 8</option>
                   <option value="Ciskul 9" selected>Ciskul 9</option>
                   <option value="Ciskul 10">Ciskul 10</option>
+                  <option value="Gemani">Gemani</option>
                 </select>
               </div>
               <div>
@@ -5270,46 +6085,47 @@ function renderWarga() {
               ${renderSensusRumahStatusHtml(initialBlok, initialNo)}
             </div>
 
-            <!-- Panel Visual Highlight Peta Nomor Rumah Blok (1-70) -->
+            <!-- Panel Visual Highlight Status Nomor Rumah Blok -->
             <div class="p-4 bg-slate-50/90 border border-slate-200/90 rounded-2xl space-y-3">
               <div class="flex items-center justify-between flex-wrap gap-2">
                 <div>
                   <h4 class="text-xs font-black text-slate-900 flex items-center gap-1.5">
                     <i class="ph-bold ph-buildings text-amber-600"></i>
-                    <span>Peta & Ketersediaan Nomor Rumah (<span id="sensusPetaBlokLabel">${initialBlok}</span>)</span>
+                    <span>Ketersediaan Nomor Rumah (<span id="sensusPetaBlokLabel">${initialBlok}</span>)</span>
                   </h4>
-                  <p class="text-[10.5px] text-slate-500 mt-0.5">Nomor rumah yang sudah didaftarkan ditandai warna <b class="text-rose-600">Merah (Terisi)</b>. Klik nomor untuk memilih langsung.</p>
+                  <p class="text-[10.5px] text-slate-500 mt-0.5">Nomor rumah yang sudah terdaftar di-highlight <b class="text-rose-600 font-black">Merah (Sudah Terdaftar)</b>, sedangkan yang belum terpakai ditandai <b class="text-emerald-600 font-black">Hijau (Tersedia)</b> pada pilihan di atas.</p>
                 </div>
-                <!-- Legend -->
+                <!-- Legend & Quick Action -->
                 <div class="flex items-center gap-1.5 text-[10px] font-bold flex-wrap">
-                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300">
-                    <span class="w-2 h-2 rounded-full bg-rose-600"></span>
-                    <span>Terdaftar (<span id="sensusCountTerdaftar">${getRegisteredWargaInBlok(initialBlok).length}</span>)</span>
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gradient-to-r from-rose-600 to-red-700 text-white font-extrabold shadow-2xs border border-rose-500">
+                    <i class="ph-bold ph-lock-key text-xs text-rose-200"></i>
+                    <span>Sudah Terdaftar (<span id="sensusCountTerdaftar">${getRegisteredWargaInBlok(initialBlok).length}</span>)</span>
                   </span>
-                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white text-slate-700 border border-slate-200">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-300 font-extrabold shadow-2xs">
+                    <i class="ph-bold ph-check text-xs text-emerald-600"></i>
                     <span>Tersedia (<span id="sensusCountTersedia">${70 - getRegisteredWargaInBlok(initialBlok).length}</span>)</span>
                   </span>
-                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300">
-                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-                    <span>Pilihan Anda</span>
-                  </span>
+                  <button type="button" onclick="openModalSemuaRumahTerpakai('${initialBlok}')" class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[10px] font-extrabold shadow-2xs transition flex items-center gap-1 active:scale-95" title="Buka peta status nomor rumah di RT 04">
+                    <i class="ph-bold ph-buildings"></i>
+                    <span>Cek Peta Rumah RT</span>
+                  </button>
                 </div>
               </div>
 
               <!-- List Chips Nomor Rumah Terdaftar di Blok ini -->
               <div>
-                <span class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Daftar Rumah yang Sudah Terdaftar di Blok Ini:</span>
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-[10px] uppercase font-bold text-slate-500 flex items-center gap-1">
+                    <i class="ph-bold ph-house-line text-rose-600"></i>
+                    <span>Daftar Rumah yang Sudah Terdaftar di Blok Ini:</span>
+                  </span>
+                  <button type="button" onclick="openModalSemuaRumahTerpakai('${initialBlok}')" class="text-[10px] font-bold text-rose-600 hover:text-rose-800 hover:underline flex items-center gap-0.5">
+                    <span>Lihat Semua Blok (${db.warga.length} Rumah)</span>
+                    <i class="ph-bold ph-caret-right text-[10px]"></i>
+                  </button>
+                </div>
                 <div id="sensusDaftarRumahTerdaftar" class="flex flex-wrap gap-1.5">
                   ${renderSensusRegisteredChipsHtml(initialBlok)}
-                </div>
-              </div>
-
-              <!-- Grid 70 Nomor Rumah -->
-              <div class="pt-2 border-t border-slate-200/80">
-                <span class="text-[10px] uppercase font-bold text-slate-400 block mb-1.5">Pilih Cepat Nomor Rumah (1-70):</span>
-                <div id="sensusGridNomorRumah" class="grid grid-cols-7 sm:grid-cols-10 md:grid-cols-14 gap-1.5 max-h-48 overflow-y-auto p-1 bg-white rounded-xl border border-slate-200/70">
-                  ${renderSensusGridRumahHtml(initialBlok, initialNo)}
                 </div>
               </div>
             </div>
@@ -5386,7 +6202,7 @@ function handleSensusSubmit(e) {
   // 1. Validasi Nomor Rumah (MUTLAK: Jika sudah digunakan, input data tertolak)
   const rumahSudahAda = findWargaByAddress(blok, no) || db.warga.find(w => isSameNoRumah(w.noRumah, noRumah));
   if (rumahSudahAda) {
-    showToast(`Input Ditolak: Nomor rumah "${noRumah}" telah digunakan atas nama KK ${rumahSudahAda.nama}!`, 'error');
+    showToast(`Input Ditolak: Nomor rumah "${noRumah}" sudah terdaftar atas nama KK ${rumahSudahAda.nama}!`, 'error');
     updateSensusUI();
     const statusEl = document.getElementById('sensusRumahStatusContainer');
     if (statusEl) statusEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -5432,6 +6248,7 @@ function handleSensusSubmit(e) {
   };
 
   db.warga.push(newWarga);
+  saveLocalStorageData();
   kirimDataKeSheets('ADD_WARGA', {
     id: newWarga.id,
     nama: newWarga.nama,
@@ -5490,6 +6307,7 @@ function konfirmasiHapusWarga(id) {
   const target = db.warga.find(w => w.id === id);
   const targetName = target ? `${target.nama} (${target.noRumah})` : id;
   db.warga = db.warga.filter(w => w.id !== id);
+  saveLocalStorageData();
   kirimDataKeSheets('DELETE_WARGA', { id });
   logEvent('WARGA', `Hapus data KK: ${targetName}`, 'danger');
   closeModal();
@@ -5505,11 +6323,11 @@ function renderEditWargaNoOptionsHtml(blok, currentNo, currentWargaId) {
     const otherW = db.warga.find(x => x.id !== currentWargaId && isSameNoRumah(x.noRumah, `${blok} ${numStr}`));
     const isSel = currentNum === i;
     if (otherW) {
-      options.push(`<option value="${numStr}" ${isSel ? 'selected' : ''} class="bg-rose-100 text-rose-800 font-bold" style="background-color:#fee2e2; color:#b91c1c; font-weight:bold;">⛔ ${numStr} [TERPAKAI: ${otherW.nama}]</option>`);
+      options.push(`<option value="${numStr}" ${isSel ? 'selected' : ''} class="bg-rose-100 text-rose-900 font-extrabold" style="background-color:#ffe4e6; color:#9f1239; font-weight:800;">⛔ ${numStr} • SUDAH TERDAFTAR [KK: ${otherW.nama} - ${otherW.status}]</option>`);
     } else if (isSel) {
-      options.push(`<option value="${numStr}" selected class="bg-amber-100 font-bold">${numStr} (Rumah KK Saat Ini)</option>`);
+      options.push(`<option value="${numStr}" selected class="bg-amber-100 font-extrabold" style="background-color:#fef3c7; color:#92400e; font-weight:800;">📍 ${numStr} (Rumah KK Saat Ini)</option>`);
     } else {
-      options.push(`<option value="${numStr}">${numStr} (Tersedia)</option>`);
+      options.push(`<option value="${numStr}" class="bg-emerald-50 text-emerald-900 font-bold" style="background-color:#ecfdf5; color:#065f46; font-weight:700;">🟢 ${numStr} • TERSEDIA</option>`);
     }
   }
   return options.join('');
@@ -5531,10 +6349,9 @@ function openModalEditWarga(id) {
   const w = db.warga.find(x => x.id === id);
   if (!w) return;
 
-  const splitAlamat = (w.noRumah || '').split(' ');
-  let currentBlok = splitAlamat[0] && splitAlamat[1] ? `${splitAlamat[0]} ${splitAlamat[1]}` : 'Ciskul 9';
-  if (currentBlok === 'Ciskul 1') currentBlok = 'Ciskul I';
-  const currentNo = splitAlamat.slice(2).join(' ') || 'No. 1';
+  let currentBlok = extractBlokFromAddress(w.noRumah) || 'Ciskul 9';
+  const currentNum = extractHouseNumber(w.noRumah) || 1;
+  const currentNo = `No. ${currentNum}`;
 
   const html = `
     <div class="space-y-4 text-left">
@@ -5565,6 +6382,7 @@ function openModalEditWarga(id) {
               <option value="Ciskul 8" ${currentBlok === 'Ciskul 8' ? 'selected' : ''}>Ciskul 8</option>
               <option value="Ciskul 9" ${currentBlok === 'Ciskul 9' ? 'selected' : ''}>Ciskul 9</option>
               <option value="Ciskul 10" ${currentBlok === 'Ciskul 10' ? 'selected' : ''}>Ciskul 10</option>
+              <option value="Gemani" ${currentBlok === 'Gemani' ? 'selected' : ''}>Gemani</option>
             </select>
           </div>
           <div>
@@ -5684,6 +6502,7 @@ function handleEditWargaSubmit(e, id) {
     pekerjaan: w.pekerjaan
   });
 
+  saveLocalStorageData();
   logEvent('WARGA', `Koreksi data warga KK: ${w.nama} (${w.noRumah})`, 'info');
   closeModal();
   showToast(`Data warga ${namaBaru} berhasil diperbarui!`);
@@ -5736,15 +6555,18 @@ function openModalKartuDigital(id) {
 }
 
 // ==========================================
-// 5. HALAMAN LAYANAN SURAT & ASPIRASI
+// 5. HALAMAN LAYANAN SURAT, ASPIRASI & PENGUMUMAN
 // ==========================================
 function renderLayanan() {
   return `
-    <div class="p-4 lg:p-6 space-y-4">
+    <div class="p-4 lg:p-6 space-y-5">
       <div>
-        <h2 class="text-base font-black text-slate-900 font-display">Layanan Surat & Aspirasi Warga</h2>
-        <p class="text-[11px] text-slate-500">Permohonan surat pengantar pengurus RT & pengaduan lingkungan</p>
+        <h2 class="text-base font-black text-slate-900 font-display">Layanan Warga, Surat & Informasi RT</h2>
+        <p class="text-[11px] text-slate-500">Papan pengumuman informasi RT, permohonan surat pengantar & pengaduan lingkungan</p>
       </div>
+
+      <!-- Papan Informasi & Pengumuman Bergambar Warga -->
+      ${renderPapanInformasiSection()}
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         
@@ -7256,7 +8078,7 @@ function initBerandaKependudukanCharts() {
   const canvasBlok = document.getElementById('chartBerandaDistribusiBlok');
   const canvasDemografi = document.getElementById('chartBerandaDemografi');
 
-  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10'];
+  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
   const blokCounts = blokNames.map(b => db.warga.filter(w => w.noRumah && (w.noRumah.includes(b) || (b === 'Ciskul I' && /\bCiskul 1\b/i.test(w.noRumah)))).length);
   const tetap = db.warga.filter(w => w.status === 'Tetap').length;
   const kontrak = db.warga.filter(w => w.status === 'Kontrak').length;
@@ -7266,7 +8088,7 @@ function initBerandaKependudukanCharts() {
     berandaDistribusiBlokChartInstance = new Chart(canvasBlok, {
       type: 'bar',
       data: {
-        labels: ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10'],
+        labels: ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'],
         datasets: [{
           label: 'Jumlah KK',
           data: blokCounts,
@@ -7276,7 +8098,8 @@ function initBerandaKependudukanCharts() {
             '#6366f1', // Ciskul 7: Indigo
             '#8b5cf6', // Ciskul 8: Purple
             '#10b981', // Ciskul 9: Emerald
-            '#f59e0b'  // Ciskul 10: Amber
+            '#f59e0b', // Ciskul 10: Amber
+            '#f43f5e'  // Gemani: Rose
           ],
           hoverBackgroundColor: [
             '#0891b2',
@@ -7284,7 +8107,8 @@ function initBerandaKependudukanCharts() {
             '#4f46e5',
             '#7c3aed',
             '#059669',
-            '#d97706'
+            '#d97706',
+            '#e11d48'
           ],
           borderRadius: 8,
           borderSkipped: false
@@ -7538,7 +8362,7 @@ function initBlokChart() {
   if (!canvas || typeof Chart === 'undefined') return;
   if (blokChartInstance) blokChartInstance.destroy();
 
-  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10'];
+  const blokNames = ['Ciskul I', 'Ciskul 6', 'Ciskul 7', 'Ciskul 8', 'Ciskul 9', 'Ciskul 10', 'Gemani'];
   const blokCounts = blokNames.map(b => db.warga.filter(w => w.noRumah && (w.noRumah.includes(b) || (b === 'Ciskul I' && /\bCiskul 1\b/i.test(w.noRumah)))).length);
 
   blokChartInstance = new Chart(canvas, {
@@ -7572,6 +8396,14 @@ window.addEventListener('DOMContentLoaded', () => {
   startLiveClock();
   muatDataDariSheets();
   renderApp();
+
+  // Begitu buka aplikasi, otomatis tampilkan Papan Informasi & Pengumuman Warga Bergambar
+  setTimeout(() => {
+    const shouldOpen = localStorage.getItem('satuwarga_papan_info_auto') !== 'false';
+    if (shouldOpen) {
+      openModalPapanInformasi();
+    }
+  }, 400);
 });
 
 // Otomatis Adaptasi Ukuran Layar jika Belum Dipilih Secara Manual
