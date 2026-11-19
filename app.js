@@ -1194,70 +1194,66 @@ function renderBeranda() {
       <!-- Seksi Khusus Demografi & Kependudukan RT 04 -->
       ${renderDashboardKependudukanSection()}
 
-      <!-- Layout Responsif Desktop: Radar Tunggakan Berdampingan dengan Agenda & Aspirasi -->
+      <!-- Radar Iuran Warga Belum Lunas (Ukuran Penuh Melebar Ke Kanan) -->
+      ${renderDashboardTunggakanSection()}
+
+      <!-- Bagian Bawah: Agenda Kegiatan Warga dan Laporan & Aspirasi Warga RT 04 -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <div class="space-y-4">
-          <!-- Radar Tunggakan Iuran Warga -->
-          ${renderDashboardTunggakanSection()}
-        </div>
-
-        <div class="space-y-4">
-          <!-- Agenda Kegiatan Warga RT 04 -->
-          <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-3.5">
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <i class="ph-bold ph-calendar-check text-brand-600 text-base"></i>
-                  Agenda Kegiatan Warga
-                </h3>
-                <p class="text-[11px] text-slate-400 mt-0.5">Jadwal kegiatan dan musyawarah lingkungan RT 04</p>
-              </div>
-              <div class="flex items-center space-x-2">
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-100 text-brand-800 border border-brand-200">${db.agenda.length} Agenda</span>
-                ${canManageAgenda() ? `
-                  <button onclick="openModalTambahAgenda()" class="px-2.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-[11px] font-bold transition flex items-center gap-1 shadow-xs active:scale-95">
-                    <i class="ph-bold ph-plus"></i>
-                    <span>Tambah</span>
-                  </button>
-                ` : ''}
-              </div>
+        <!-- Agenda Kegiatan Warga RT 04 -->
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/90 shadow-sm space-y-3.5">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <i class="ph-bold ph-calendar-check text-brand-600 text-base"></i>
+                Agenda Kegiatan Warga
+              </h3>
+              <p class="text-[11px] text-slate-400 mt-0.5">Jadwal kegiatan dan musyawarah lingkungan RT 04</p>
             </div>
-
-            <div class="space-y-2.5">
-              ${db.agenda.length === 0 ? `
-                <div class="p-6 text-center bg-slate-50 rounded-2xl border border-slate-100">
-                  <i class="ph-bold ph-calendar-blank text-2xl text-slate-400 mb-1 inline-block"></i>
-                  <p class="text-xs font-bold text-slate-500">Belum ada agenda kegiatan yang dijadwalkan.</p>
-                </div>
-              ` : db.agenda.map(a => `
-                <div class="p-3.5 bg-slate-50 hover:bg-brand-50/40 rounded-2xl border border-slate-200/70 flex items-start space-x-3 transition">
-                  <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand-600 to-teal-500 text-white flex flex-col items-center justify-center flex-shrink-0 shadow-sm">
-                    <i class="ph-bold ph-calendar-star text-lg"></i>
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <div class="flex items-start justify-between gap-2">
-                      <h4 class="text-xs font-black text-slate-900">${a.judul}</h4>
-                      ${canManageAgenda() ? `
-                        <button onclick="hapusAgenda('${a.id}', '${a.judul.replace(/'/g, "\\'")}')" title="Hapus Agenda" class="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition flex-shrink-0">
-                          <i class="ph-bold ph-trash text-sm"></i>
-                        </button>
-                      ` : ''}
-                    </div>
-                    <div class="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5 flex-wrap">
-                      <span class="flex items-center gap-1"><i class="ph-bold ph-clock text-brand-600"></i> ${a.tanggal} • ${a.jam}</span>
-                      <span>•</span>
-                      <span class="flex items-center gap-1"><i class="ph-bold ph-map-pin text-rose-500"></i> ${a.lokasi}</span>
-                    </div>
-                    <p class="text-[11px] text-slate-600 mt-1.5 bg-white p-2.5 rounded-xl border border-slate-200/60 leading-relaxed">${a.info}</p>
-                  </div>
-                </div>
-              `).join('')}
+            <div class="flex items-center space-x-2">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-100 text-brand-800 border border-brand-200">${db.agenda.length} Agenda</span>
+              ${canManageAgenda() ? `
+                <button onclick="openModalTambahAgenda()" class="px-2.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-[11px] font-bold transition flex items-center gap-1 shadow-xs active:scale-95">
+                  <i class="ph-bold ph-plus"></i>
+                  <span>Tambah</span>
+                </button>
+              ` : ''}
             </div>
           </div>
 
-          <!-- Laporan & Aspirasi Masalah Lingkungan Warga di Dashboard Depan -->
-          ${renderDashboardLaporanSection()}
+          <div class="space-y-2.5">
+            ${db.agenda.length === 0 ? `
+              <div class="p-6 text-center bg-slate-50 rounded-2xl border border-slate-100">
+                <i class="ph-bold ph-calendar-blank text-2xl text-slate-400 mb-1 inline-block"></i>
+                <p class="text-xs font-bold text-slate-500">Belum ada agenda kegiatan yang dijadwalkan.</p>
+              </div>
+            ` : db.agenda.map(a => `
+              <div class="p-3.5 bg-slate-50 hover:bg-brand-50/40 rounded-2xl border border-slate-200/70 flex items-start space-x-3 transition">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand-600 to-teal-500 text-white flex flex-col items-center justify-center flex-shrink-0 shadow-sm">
+                  <i class="ph-bold ph-calendar-star text-lg"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-start justify-between gap-2">
+                    <h4 class="text-xs font-black text-slate-900">${a.judul}</h4>
+                    ${canManageAgenda() ? `
+                      <button onclick="hapusAgenda('${a.id}', '${a.judul.replace(/'/g, "\\'")}')" title="Hapus Agenda" class="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition flex-shrink-0">
+                        <i class="ph-bold ph-trash text-sm"></i>
+                      </button>
+                    ` : ''}
+                  </div>
+                  <div class="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5 flex-wrap">
+                    <span class="flex items-center gap-1"><i class="ph-bold ph-clock text-brand-600"></i> ${a.tanggal} • ${a.jam}</span>
+                    <span>•</span>
+                    <span class="flex items-center gap-1"><i class="ph-bold ph-map-pin text-rose-500"></i> ${a.lokasi}</span>
+                  </div>
+                  <p class="text-[11px] text-slate-600 mt-1.5 bg-white p-2.5 rounded-xl border border-slate-200/60 leading-relaxed">${a.info}</p>
+                </div>
+              </div>
+            `).join('')}
+          </div>
         </div>
+
+        <!-- Laporan & Aspirasi Masalah Lingkungan Warga di Dashboard Depan -->
+        ${renderDashboardLaporanSection()}
       </div>
 
     </div>
@@ -2011,7 +2007,7 @@ function renderDashboardTunggakanSection() {
           <p class="text-[11px] text-brand-700 mt-0.5">Semua warga telah melunasi iuran untuk filter periode yang dipilih.</p>
         </div>
       ` : `
-        <div id="radarTunggakanContainer" class="space-y-2.5 max-h-80 overflow-y-auto pr-1 relative" style="scroll-behavior: auto;">
+        <div id="radarTunggakanContainer" class="space-y-2.5 max-h-[380px] overflow-y-auto pr-1 relative" style="scroll-behavior: auto;">
           <div id="radarTunggakanTrack1" class="space-y-2.5">
             ${cardsHtml}
           </div>
@@ -2036,27 +2032,27 @@ function renderDashboardTunggakanSection() {
 function renderCardPenunggak(w, tarif) {
   const pesanWa = `Halo Bpk/Ibu ${w.nama} (${w.noRumah}), salam hangat dari Pengurus RT 04 / RW 14 Cisaranten Kulon. Mengingatkan informasi iuran kas RT untuk periode ${w.bulanNunggak.join(', ')} sebesar Rp ${w.nominalTunggak.toLocaleString('id-ID')}. Pembayaran dapat melalui Bendahara RT (${appConfig.namaBendahara}). Hatur nuhun.`;
   return `
-    <div class="p-3.5 bg-slate-50 hover:bg-slate-100/70 rounded-2xl border border-slate-200/80 flex items-center justify-between flex-wrap gap-2 transition">
+    <div class="p-3.5 bg-slate-50 hover:bg-slate-100/70 rounded-2xl border border-slate-200/80 flex items-center justify-between flex-wrap md:flex-nowrap gap-3 transition">
       <div class="min-w-0 flex-1">
-        <div class="flex items-center space-x-2">
+        <div class="flex items-center space-x-2 flex-wrap gap-y-1">
           <h4 class="text-xs font-black text-slate-900 truncate">${w.nama}</h4>
           <span class="px-2 py-0.5 rounded-full text-[9px] font-black ${w.bulanNunggak.length > 1 ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-amber-100 text-amber-800 border border-amber-200'}">
             ${w.bulanNunggak.length} Bulan Menunggak
           </span>
         </div>
-        <p class="text-[11px] text-slate-500 mt-0.5">${w.noRumah} • Total: <span class="text-rose-600 font-black">Rp ${w.nominalTunggak.toLocaleString('id-ID')}</span></p>
+        <p class="text-[11px] text-slate-500 mt-0.5"><b class="text-slate-700">${w.noRumah}</b> • Total: <span class="text-rose-600 font-black">Rp ${w.nominalTunggak.toLocaleString('id-ID')}</span></p>
         <p class="text-[10px] text-rose-600 font-semibold mt-0.5 leading-tight">
           <b>Bulan:</b> ${w.bulanNunggak.join(', ')}
         </p>
       </div>
-      <div class="flex items-center space-x-1.5 flex-wrap">
+      <div class="flex items-center space-x-1.5 flex-wrap sm:flex-nowrap flex-shrink-0">
         <button onclick="openModalKartuIuran('${w.id}')" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition shadow-2xs">
           Kartu Iuran
         </button>
         ${isPengurus() && w.telp ? `
           <a href="https://wa.me/${w.telp.replace(/^0/, '62')}?text=${encodeURIComponent(pesanWa)}" target="_blank" class="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[11px] font-bold transition flex items-center gap-1 shadow-xs" title="Kirim Pengingat WhatsApp">
             <i class="ph-bold ph-whatsapp-logo text-sm"></i>
-            <span class="hidden sm:inline">WA</span>
+            <span>Chat WA</span>
           </a>
         ` : ''}
         ${canManageIuran() ? `
