@@ -265,12 +265,13 @@ let appConfig = {
   
   // Konfigurasi Self-Hosted Payment Gateway RT 04
   pgAktif: true,
-  pgNamaBank: 'Bank Mandiri',
-  pgNoRekening: '131-00-140414-9',
-  pgAtasNama: 'KAS RT 04 CISKUL / H. AHMAD SOBARI',
-  pgQrisMerchant: 'RT 04 RW 14 CISARANTEN KULON',
-  pgQrisNmid: 'ID102604140001',
-  pgQrisImg: '',
+  pgNamaBank: 'Bank BSI',
+  pgNoRekening: '7343772968',
+  pgAtasNama: 'RT 04 CISARANTEN KULON',
+  pgQrisMerchant: 'RT 04 CISKUL',
+  pgQrisMid: '0000980029',
+  pgQrisNmid: 'ID1026482622598',
+  pgQrisImg: 'qris-rt04.jpg',
   pgPetunjuk: 'Mohon transfer nominal tepat beserta 3 digit kode unik agar sistem verifikasi bendahara dapat mencocokkan pembayaran Anda secara instan.',
   pgGunakanKodeUnik: true,
   pgWaKonfirmasi: '6281234567891'
@@ -310,6 +311,17 @@ function loadLocalStorageData() {
       if (parsedConfig && typeof parsedConfig === 'object') {
         appConfig = { ...appConfig, ...parsedConfig };
       }
+    }
+    // Pastikan konfigurasi resmi Bank BSI dan QRIS RT 04 CISKUL terbaru terpasang
+    if (!appConfig.pgQrisMid || appConfig.pgNamaBank === 'Bank Mandiri' || appConfig.pgNoRekening === '131-00-140414-9' || !appConfig.pgQrisImg) {
+      appConfig.pgNamaBank = 'Bank BSI';
+      appConfig.pgNoRekening = '7343772968';
+      appConfig.pgAtasNama = 'RT 04 CISARANTEN KULON';
+      appConfig.pgQrisMerchant = 'RT 04 CISKUL';
+      appConfig.pgQrisMid = '0000980029';
+      appConfig.pgQrisNmid = 'ID1026482622598';
+      appConfig.pgQrisImg = 'qris-rt04.jpg';
+      saveLocalStorageData();
     }
   } catch (e) {
     console.warn('Gagal membaca cache lokal:', e);
@@ -3695,7 +3707,7 @@ function bukaWhatsAppKonfirmasi(invoiceId) {
 
   const metodeStr = p.metode === 'qris' 
     ? 'QRIS RT 04 (m-Banking / e-Wallet)' 
-    : `Transfer Bank RT (${appConfig.pgNamaBank || 'Bank Mandiri'})`;
+    : `Transfer Bank RT (${appConfig.pgNamaBank || 'Bank BSI'})`;
 
   const bulanStr = Array.isArray(p.bulanList) ? p.bulanList.join(', ') : p.bulanList;
 
@@ -4197,7 +4209,7 @@ function openModalCetakKwitansiPayment(invoiceId) {
           <tr>
             <td class="lbl">Metode Pembayaran</td>
             <td class="sep">:</td>
-            <td class="val">${p.metode === 'qris' ? 'QRIS RT 04 (m-Banking / e-Wallet)' : `Transfer Bank Kas RT (${appConfig.pgNamaBank || 'Bank Mandiri'})`}</td>
+            <td class="val">${p.metode === 'qris' ? 'QRIS RT 04 (m-Banking / e-Wallet)' : `Transfer Bank Kas RT (${appConfig.pgNamaBank || 'Bank BSI'})`}</td>
           </tr>
           <tr>
             <td class="lbl">Waktu Pembayaran</td>
@@ -4247,8 +4259,8 @@ function initQrisCode() {
   const tarif = Number(appConfig.tarifIuran) || 75000;
   const countBulan = bayarSelectedBulan.length;
   const nominal = (countBulan * tarif) + (appConfig.pgGunakanKodeUnik !== false && countBulan > 0 ? (bayarKodeUnik || 124) : 0);
-  const merchant = appConfig.pgQrisMerchant || 'RT 04 RW 14 CISARANTEN KULON';
-  const nmid = appConfig.pgQrisNmid || 'ID102604140001';
+  const merchant = appConfig.pgQrisMerchant || 'RT 04 CISKUL';
+  const nmid = appConfig.pgQrisNmid || 'ID1026482622598';
 
   if (!warga || countBulan === 0 || nominal <= 0) {
     container.innerHTML = `
@@ -4324,6 +4336,17 @@ function drawFallbackQrisSvg(container, nominal, merchant) {
 }
 
 function unduhGambarQris() {
+  if (appConfig.pgQrisImg) {
+    const a = document.createElement('a');
+    a.href = appConfig.pgQrisImg;
+    a.download = `QRIS_RT04_CISKUL_${CURRENT_YEAR}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast('Gambar QRIS resmi RT 04 berhasil diunduh!');
+    return;
+  }
+
   const container = document.getElementById('qrisPaymentCanvas');
   if (!container) return;
 
@@ -4331,7 +4354,7 @@ function unduhGambarQris() {
   if (canvas) {
     const a = document.createElement('a');
     a.href = canvas.toDataURL('image/png');
-    a.download = `QRIS_IURAN_RT04_${CURRENT_YEAR}.png`;
+    a.download = `QRIS_RT04_CISKUL_${CURRENT_YEAR}.png`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -4343,7 +4366,7 @@ function unduhGambarQris() {
   if (img && img.src) {
     const a = document.createElement('a');
     a.href = img.src;
-    a.download = `QRIS_IURAN_RT04_${CURRENT_YEAR}.png`;
+    a.download = `QRIS_RT04_CISKUL_${CURRENT_YEAR}.png`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -4352,6 +4375,36 @@ function unduhGambarQris() {
   }
 
   showToast('Fitur unduh siap digunakan!');
+}
+
+function openModalGambarQris(src) {
+  const imgSrc = src || appConfig.pgQrisImg || 'qris-rt04.jpg';
+  const html = `
+    <div class="space-y-3 text-center p-1">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div>
+          <h3 class="text-xs font-black uppercase text-slate-900 font-display">QRIS Resmi RT 04 CISKUL</h3>
+          <p class="text-[10px] text-slate-500">Merchant: ${appConfig.pgQrisMerchant || 'RT 04 CISKUL'} • MID: ${appConfig.pgQrisMid || '0000980029'}</p>
+        </div>
+        <button onclick="closeModal()" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+          <i class="ph-bold ph-x text-lg"></i>
+        </button>
+      </div>
+
+      <div class="p-2 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-200">
+        <img src="${imgSrc}" alt="QRIS RT 04 CISKUL" class="max-h-[70vh] w-auto object-contain rounded-xl shadow-md">
+      </div>
+
+      <div class="flex items-center justify-center gap-2 pt-1">
+        <button onclick="unduhGambarQris()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95">
+          <i class="ph-bold ph-download-simple"></i>
+          <span>Unduh Gambar QRIS</span>
+        </button>
+        <button onclick="closeModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition">Tutup</button>
+      </div>
+    </div>
+  `;
+  openModal(html, 'max-w-md');
 }
 
 // Router View Utama Tab "Bayar Iuran"
@@ -4783,7 +4836,7 @@ function renderBayarPortalView() {
           ${bayarMetode === 'qris' ? `
             <div class="space-y-4">
               <!-- Official Indonesian QRIS Frame -->
-              <div class="bg-white border-2 border-slate-800 rounded-2xl overflow-hidden shadow-md max-w-[280px] mx-auto text-center">
+              <div class="bg-white border-2 border-slate-800 rounded-2xl overflow-hidden shadow-md max-w-[320px] mx-auto text-center">
                 <!-- Red Top Header -->
                 <div class="bg-[#e11d48] text-white px-3 py-2 flex items-center justify-between">
                   <div class="flex items-center space-x-1.5">
@@ -4793,20 +4846,27 @@ function renderBayarPortalView() {
                   <span class="text-[8.5px] font-bold uppercase tracking-wider text-white/90">GPN</span>
                 </div>
 
-                <!-- Merchant Name & NMID -->
+                <!-- Merchant Name & NMID / MID -->
                 <div class="px-3 pt-2.5 pb-1">
                   <h4 class="text-xs font-black text-slate-900 uppercase font-display leading-tight">
-                    ${appConfig.pgQrisMerchant || 'RT 04 RW 14 CISARANTEN KULON'}
+                    ${appConfig.pgQrisMerchant || 'RT 04 CISKUL'}
                   </h4>
-                  <p class="text-[9.5px] font-mono text-slate-500 font-semibold mt-0.5">
-                    NMID: ${appConfig.pgQrisNmid || 'ID102604140001'}
-                  </p>
+                  <div class="flex items-center justify-center gap-1.5 text-[9.5px] font-mono text-slate-500 font-semibold mt-0.5 flex-wrap">
+                    <span>NMID: ${appConfig.pgQrisNmid || 'ID1026482622598'}</span>
+                    ${appConfig.pgQrisMid ? `<span>• MID: ${appConfig.pgQrisMid}</span>` : ''}
+                  </div>
                 </div>
 
-                <!-- QR Canvas Container -->
-                <div class="p-2 flex items-center justify-center">
+                <!-- QR Canvas Container / Image -->
+                <div class="p-2 flex items-center justify-center bg-white">
                   ${appConfig.pgQrisImg ? `
-                    <img src="${appConfig.pgQrisImg}" alt="QRIS RT 04" class="w-[210px] h-[210px] object-contain rounded-xl">
+                    <div class="relative group cursor-pointer w-full flex flex-col items-center" onclick="openModalGambarQris('${appConfig.pgQrisImg}')" title="Klik untuk perbesar QRIS">
+                      <img src="${appConfig.pgQrisImg}" alt="QRIS RT 04 CISKUL" class="w-full max-h-[350px] object-contain rounded-xl shadow-xs transition transform group-hover:scale-[1.02]">
+                      <span class="mt-1 text-[9.5px] text-slate-400 group-hover:text-emerald-700 font-bold flex items-center gap-1">
+                        <i class="ph-bold ph-magnifying-glass-plus"></i>
+                        <span>Klik untuk perbesar / zoom</span>
+                      </span>
+                    </div>
                   ` : `
                     <div id="qrisPaymentCanvas" class="flex items-center justify-center min-h-[210px]">
                       <!-- Generated by initQrisCode() -->
@@ -4827,7 +4887,11 @@ function renderBayarPortalView() {
                   <i class="ph-bold ph-download-simple"></i>
                   <span>Unduh QRIS</span>
                 </button>
-                <button onclick="salinKeClipboard('${totalBayar}', 'Nominal Rp ${totalBayar.toLocaleString('id-ID')} disalin!')" class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-emerald-200 active:scale-95">
+                <button onclick="openModalGambarQris('${appConfig.pgQrisImg || 'qris-rt04.jpg'}')" class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-emerald-200 active:scale-95">
+                  <i class="ph-bold ph-eye"></i>
+                  <span>Lihat Full Poster</span>
+                </button>
+                <button onclick="salinKeClipboard('${totalBayar}', 'Nominal Rp ${totalBayar.toLocaleString('id-ID')} disalin!')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-200 active:scale-95">
                   <i class="ph-bold ph-copy"></i>
                   <span>Salin Nominal</span>
                 </button>
@@ -4840,8 +4904,9 @@ function renderBayarPortalView() {
                   <span>Cara Pembayaran QRIS:</span>
                 </p>
                 <ol class="list-decimal list-inside space-y-0.5 text-[10.5px] text-slate-600 pl-1">
-                  <li>Buka m-Banking (BCA, Mandiri, BRI, BNI, BSI, BJB) atau e-Wallet (GoPay, OVO, Dana, ShopeePay).</li>
+                  <li>Buka m-Banking (BSI, BCA, Mandiri, BRI, BNI, BJB) atau e-Wallet (GoPay, OVO, Dana, ShopeePay, LinkAja).</li>
                   <li>Pilih menu <b>Scan / Bayar QRIS</b> dan scan gambar di atas.</li>
+                  <li>Pastikan nama merchant tertera: <b>${appConfig.pgQrisMerchant || 'RT 04 CISKUL'}</b>.</li>
                   <li>Masukkan nominal tepat: <b>Rp ${totalBayar.toLocaleString('id-ID')}</b>.</li>
                   <li>Simpan screenshot bukti pembayaran lalu unggah pada form di samping.</li>
                 </ol>
@@ -4851,13 +4916,13 @@ function renderBayarPortalView() {
             <!-- KONTEN METODE 2: TRANSFER REKENING BANK RT -->
             <div class="space-y-4">
               <!-- Visual Bank Debit Card Graphic -->
-              <div class="bg-gradient-to-br from-slate-900 via-sky-950 to-slate-900 text-white p-5 rounded-2xl border border-sky-500/30 shadow-lg relative overflow-hidden">
+              <div class="bg-gradient-to-br from-teal-950 via-slate-900 to-emerald-950 text-white p-5 rounded-2xl border border-teal-500/30 shadow-lg relative overflow-hidden">
                 <div class="flex items-center justify-between mb-4">
-                  <span class="text-xs font-black tracking-wider uppercase text-sky-300 font-display flex items-center gap-1.5">
+                  <span class="text-xs font-black tracking-wider uppercase text-emerald-300 font-display flex items-center gap-1.5">
                     <i class="ph-bold ph-bank text-sm"></i>
-                    ${appConfig.pgNamaBank || 'Bank Mandiri'}
+                    ${appConfig.pgNamaBank || 'Bank BSI'}
                   </span>
-                  <span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-white/20 text-white tracking-widest uppercase">
+                  <span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 tracking-widest uppercase">
                     REKENING KAS RT 04
                   </span>
                 </div>
@@ -4868,22 +4933,22 @@ function renderBayarPortalView() {
                 </div>
 
                 <div class="space-y-1">
-                  <span class="text-[10px] text-sky-200/80 uppercase font-semibold">Nomor Rekening:</span>
+                  <span class="text-[10px] text-emerald-200/80 uppercase font-semibold">Nomor Rekening:</span>
                   <div class="flex items-center justify-between">
-                    <span class="text-lg font-mono font-black tracking-wider text-white">
-                      ${appConfig.pgNoRekening || '131-00-140414-9'}
+                    <span class="text-xl font-mono font-black tracking-wider text-white">
+                      ${appConfig.pgNoRekening || '7343772968'}
                     </span>
-                    <button onclick="salinKeClipboard('${appConfig.pgNoRekening || '131-00-140414-9'}', 'Nomor Rekening RT berhasil disalin!')" class="px-2.5 py-1 bg-white text-slate-900 hover:bg-sky-50 rounded-lg text-xs font-black transition flex items-center gap-1 shadow active:scale-95">
+                    <button onclick="salinKeClipboard('${appConfig.pgNoRekening || '7343772968'}', 'Nomor Rekening Bank BSI berhasil disalin!')" class="px-2.5 py-1 bg-white text-slate-900 hover:bg-emerald-50 rounded-lg text-xs font-black transition flex items-center gap-1 shadow active:scale-95">
                       <i class="ph-bold ph-copy"></i>
                       <span>Salin</span>
                     </button>
                   </div>
                 </div>
 
-                <div class="pt-3 mt-3 border-t border-sky-800/60 flex items-center justify-between text-[11px]">
+                <div class="pt-3 mt-3 border-t border-teal-800/60 flex items-center justify-between text-[11px]">
                   <div>
-                    <span class="text-[9.5px] text-sky-200/70 block uppercase">Atas Nama Penerima:</span>
-                    <span class="font-bold text-white tracking-wide">${appConfig.pgAtasNama || 'KAS RT 04 CISKUL'}</span>
+                    <span class="text-[9.5px] text-teal-200/70 block uppercase">Atas Nama Penerima:</span>
+                    <span class="font-bold text-white tracking-wide">${appConfig.pgAtasNama || 'RT 04 CISARANTEN KULON'}</span>
                   </div>
                   <span class="text-xs font-black text-emerald-400 font-mono">RT 04 / RW 14</span>
                 </div>
@@ -4896,7 +4961,7 @@ function renderBayarPortalView() {
                   <span>Panduan Transfer Rekening:</span>
                 </p>
                 <ol class="list-decimal list-inside space-y-0.5 text-[10.5px] text-slate-600 pl-1">
-                  <li>Lakukan transfer via Mobile Banking, Internet Banking, atau ATM ke nomor rekening di atas.</li>
+                  <li>Lakukan transfer via Mobile Banking BSI / Bank lain, Internet Banking, atau ATM ke nomor rekening di atas.</li>
                   <li>Pastikan nominal transfer tepat <b>Rp ${totalBayar.toLocaleString('id-ID')}</b> (termasuk kode unik).</li>
                   <li>Simpan struk / bukti transfer dan unggah pada formulir konfirmasi.</li>
                 </ol>
@@ -5217,11 +5282,14 @@ function handleSimpanConfigGateway(e) {
   appConfig.pgNoRekening = document.getElementById('configPgRekening').value.trim();
   appConfig.pgAtasNama = document.getElementById('configPgAtasNama').value.trim();
   appConfig.pgQrisMerchant = document.getElementById('configPgMerchant').value.trim();
+  const midEl = document.getElementById('configPgMid');
+  if (midEl) appConfig.pgQrisMid = midEl.value.trim();
   appConfig.pgQrisNmid = document.getElementById('configPgNmid').value.trim();
   appConfig.pgWaKonfirmasi = document.getElementById('configPgWa').value.trim();
   appConfig.pgGunakanKodeUnik = document.getElementById('configPgKodeUnik').checked;
   appConfig.pgPetunjuk = document.getElementById('configPgPetunjuk').value.trim();
 
+  saveLocalStorageData();
   kirimDataKeSheets('SAVE_CONFIG', appConfig);
   showToast('Konfigurasi Self-Hosted Payment Gateway berhasil disimpan!');
   renderApp();
@@ -5234,6 +5302,7 @@ function handleUploadQrisAdmin(e) {
   const reader = new FileReader();
   reader.onload = function(evt) {
     appConfig.pgQrisImg = evt.target.result;
+    saveLocalStorageData();
     kirimDataKeSheets('SAVE_CONFIG', appConfig);
     showToast('Gambar QRIS resmi RT 04 berhasil diunggah dan disimpan!');
     renderApp();
@@ -5242,9 +5311,10 @@ function handleUploadQrisAdmin(e) {
 }
 
 function resetQrisImageAdmin() {
-  appConfig.pgQrisImg = '';
+  appConfig.pgQrisImg = 'qris-rt04.jpg';
+  saveLocalStorageData();
   kirimDataKeSheets('SAVE_CONFIG', appConfig);
-  showToast('Gambar QRIS dikembalikan ke generator dinamis.');
+  showToast('Gambar QRIS dikembalikan ke QRIS Resmi RT 04 CISKUL.');
   renderApp();
 }
 
@@ -7172,8 +7242,8 @@ function renderAdminConfig() {
 
           <form onsubmit="handleSimpanConfigGateway(event)" class="space-y-4">
             <!-- Bagian 1: Rekening Kas RT -->
-            <div class="p-4 bg-sky-50/50 rounded-2xl border border-sky-200 space-y-3">
-              <span class="text-[10px] font-black uppercase text-sky-900 tracking-wider flex items-center gap-1.5 font-bold">
+            <div class="p-4 bg-teal-50/50 rounded-2xl border border-teal-200 space-y-3">
+              <span class="text-[10px] font-black uppercase text-teal-900 tracking-wider flex items-center gap-1.5 font-bold">
                 <i class="ph-bold ph-bank"></i>
                 Rekening Kas Resmi RT 04 (Transfer Bank)
               </span>
@@ -7181,17 +7251,17 @@ function renderAdminConfig() {
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Nama Bank Kas RT</label>
-                  <input type="text" id="configPgBank" required value="${appConfig.pgNamaBank || 'Bank Mandiri'}" placeholder="Contoh: Bank Mandiri / BCA / BSI / BJB" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold">
+                  <input type="text" id="configPgBank" required value="${appConfig.pgNamaBank || 'Bank BSI'}" placeholder="Contoh: Bank BSI / Mandiri / BCA" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold">
                 </div>
                 <div>
                   <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Nomor Rekening RT</label>
-                  <input type="text" id="configPgRekening" required value="${appConfig.pgNoRekening || '131-00-140414-9'}" placeholder="Nomor rekening kas RT" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold">
+                  <input type="text" id="configPgRekening" required value="${appConfig.pgNoRekening || '7343772968'}" placeholder="Nomor rekening kas RT" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold">
                 </div>
               </div>
 
               <div>
                 <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Atas Nama Rekening Kas RT</label>
-                <input type="text" id="configPgAtasNama" required value="${appConfig.pgAtasNama || 'KAS RT 04 CISKUL / H. AHMAD SOBARI'}" placeholder="Nama pemilik / pemegang rekening kas RT" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold">
+                <input type="text" id="configPgAtasNama" required value="${appConfig.pgAtasNama || 'RT 04 CISARANTEN KULON'}" placeholder="Nama pemilik / pemegang rekening kas RT" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold">
               </div>
             </div>
 
@@ -7202,25 +7272,30 @@ function renderAdminConfig() {
                 QRIS Nasional RT 04 (Semua m-Banking & e-Wallet)
               </span>
 
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Nama Merchant QRIS RT</label>
-                  <input type="text" id="configPgMerchant" required value="${appConfig.pgQrisMerchant || 'RT 04 RW 14 CISARANTEN KULON'}" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold">
+                  <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Nama Merchant QRIS</label>
+                  <input type="text" id="configPgMerchant" required value="${appConfig.pgQrisMerchant || 'RT 04 CISKUL'}" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">MID (Merchant ID)</label>
+                  <input type="text" id="configPgMid" required value="${appConfig.pgQrisMid || '0000980029'}" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-semibold">
                 </div>
                 <div>
                   <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">NMID QRIS</label>
-                  <input type="text" id="configPgNmid" required value="${appConfig.pgQrisNmid || 'ID102604140001'}" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-semibold">
+                  <input type="text" id="configPgNmid" required value="${appConfig.pgQrisNmid || 'ID1026482622598'}" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-semibold">
                 </div>
               </div>
 
               <div>
-                <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Gambar QRIS Khusus RT (Opsional)</label>
+                <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1">Gambar QRIS Khusus RT (Standee / Poster)</label>
                 <div class="flex items-center space-x-3 flex-wrap gap-y-2">
                   ${appConfig.pgQrisImg ? `
-                    <img src="${appConfig.pgQrisImg}" alt="QRIS Custom" class="w-14 h-14 rounded-xl object-contain border border-emerald-300 bg-white p-1">
+                    <img src="${appConfig.pgQrisImg}" alt="QRIS RT 04 CISKUL" class="w-14 h-14 rounded-xl object-contain border border-emerald-300 bg-white p-1 cursor-pointer" onclick="openModalGambarQris('${appConfig.pgQrisImg}')" title="Klik untuk lihat">
                     <div>
-                      <p class="text-xs font-bold text-emerald-900">Gambar QRIS Kustom Aktif</p>
-                      <button type="button" onclick="resetQrisImageAdmin()" class="text-[11px] text-rose-600 hover:underline font-bold">Gunakan Generator Dinamis Bawaan</button>
+                      <p class="text-xs font-bold text-emerald-900">Gambar QRIS Resmi Aktif (${appConfig.pgQrisImg})</p>
+                      <button type="button" onclick="openModalGambarQris('${appConfig.pgQrisImg}')" class="text-[11px] text-emerald-700 hover:underline font-bold mr-2">Pratinjau</button>
+                      <button type="button" onclick="resetQrisImageAdmin()" class="text-[11px] text-rose-600 hover:underline font-bold">Kembalikan ke Default</button>
                     </div>
                   ` : `
                     <label class="px-3 py-2 bg-white hover:bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5 shadow-2xs">
